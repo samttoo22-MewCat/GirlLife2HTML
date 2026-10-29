@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-11"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-12"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -346,6 +346,101 @@ CLOUD_SAVE_UI_JS = r'''(() => {
     });
   }
 
+  // Warm media already referenced by the current scene and visible actions.
+  // Do not walk the full game asset tree: it contains tens of thousands of files.
+  const prefetchedMedia = new Set();
+  const mediaQueue = [];
+  let mediaActive = 0;
+  const mediaConcurrency = 6;
+  function pumpMediaQueue() {
+    while (mediaActive < mediaConcurrency && mediaQueue.length) {
+      const item = mediaQueue.shift();
+      mediaActive++;
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        mediaActive--;
+        pumpMediaQueue();
+      };
+      if (item.kind === "video") {
+        const video = document.createElement("video");
+        video.preload = "metadata";
+        video.onloadedmetadata = finish;
+        video.onerror = finish;
+        video.src = item.url;
+        video.load();
+        setTimeout(finish, 12000);
+      } else {
+        const image = new Image();
+        image.decoding = "async";
+        image.fetchPriority = item.priority || "low";
+        image.onload = finish;
+        image.onerror = finish;
+        image.src = item.url;
+        if (image.complete) finish();
+        else setTimeout(finish, 12000);
+      }
+    }
+  }
+  function enqueueMedia(raw, kind, priority) {
+    if (!raw || typeof raw !== "string") return;
+    let url;
+    try { url = new URL(raw, document.baseURI); } catch (_) { return; }
+    if (url.origin !== location.origin || !/^https?:$/.test(url.protocol)) return;
+    if (!/\.(?:avif|bmp|gif|jpe?g|png|webp|mp4|webm|ogv)(?:$|[?#])/i.test(url.href)) return;
+    const key = `${kind}:${url.href}`;
+    if (prefetchedMedia.has(key)) return;
+    prefetchedMedia.add(key);
+    mediaQueue.push({url: url.href, kind, priority});
+    pumpMediaQueue();
+  }
+  function warmCurrentScene() {
+    const roots = [
+      document.querySelector("qsp-main-content"),
+      document.querySelector("qsp-actions-list"),
+      document.querySelector("qsp-objects-list"),
+      document.querySelector("qsp-stats-content"),
+    ].filter(Boolean);
+    for (const root of roots) {
+      root.querySelectorAll("img, video, source, [data-src], [data-lazy-src], [data-original], [data-poster], [data-image], [data-video], [data-media]").forEach(media => {
+        const raw = media.currentSrc || media.src || media.getAttribute("poster") || media.getAttribute("src") ||
+          media.getAttribute("data-src") || media.getAttribute("data-lazy-src") || media.getAttribute("data-original") ||
+          media.getAttribute("data-poster") || media.getAttribute("data-image") || media.getAttribute("data-video") || media.getAttribute("data-media");
+        const isVideo = media.tagName === "VIDEO" || media.tagName === "SOURCE" && (/video/i.test(media.type || "") || media.closest("video"));
+        const priority = root.matches("qsp-main-content") ? "high" : "low";
+        enqueueMedia(raw, isVideo ? "video" : "image", priority);
+        const srcset = media.getAttribute("srcset");
+        if (srcset) {
+          for (const candidate of srcset.split(",")) enqueueMedia(candidate.trim().split(/\s+/)[0], "image", priority);
+        }
+      });
+      root.querySelectorAll("[style*='url(']").forEach(element => {
+        const match = getComputedStyle(element).backgroundImage.match(/url\([\"']?(.*?)[\"']?\)/i);
+        if (match) enqueueMedia(match[1], "image", root.matches("qsp-main-content") ? "high" : "low");
+      });
+    }
+  }
+  let mediaWarmTimer = 0;
+  const mediaObserver = new MutationObserver(() => {
+    clearTimeout(mediaWarmTimer);
+    mediaWarmTimer = setTimeout(warmCurrentScene, 100);
+  });
+  mediaObserver.observe(document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ["src", "poster", "style"]});
+  warmCurrentScene();
+
+  // On phones the QSP theme can make its view background fill the entire
+  // viewport. A touch in the visible backdrop should still dismiss the view.
+  document.addEventListener("pointerup", event => {
+    if (event.pointerType !== "touch") return;
+    const view = event.target && event.target.closest && event.target.closest("qsp-view");
+    if (!view || view.hidden || getComputedStyle(view).display === "none") return;
+    if (event.target.closest("img, video, button, a, input, select, textarea")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    view.click();
+  }, true);
+
   window.girllifeCloudCredentials = options => openCredentials(options || {});
   window.girllifeCloudAccountStatus = info => openStatus(info || {});
 })();
@@ -631,6 +726,15 @@ MOBILE_LAYOUT_CSS = """
     justify-content: center;
     z-index: 900;
     background: rgb(0 0 0 / 55%);
+    background-image: none !important;
+    touch-action: manipulation;
+    cursor: pointer;
+  }
+  qsp-view img,
+  qsp-view video {
+    position: relative;
+    z-index: 1;
+    pointer-events: auto;
   }
   .regular-actions {
     left: 8px;
@@ -798,6 +902,17 @@ def apply_mobile_layout(output: Path) -> None:
         </div>
         '''
         markup = markup.replace('<div class="main-block">', control + '<div class="main-block">', 1)
+    css_link = '<css-link src="qspider:themes/aero.css"></css-link>'
+    versioned_css_link = f'<css-link src="qspider:themes/aero.css?v={CLOUD_SAVE_CACHE_VERSION}"></css-link>'
+    markup = re.sub(
+        r'<css-link src="qspider:themes/aero\.css(?:\?v=[^"]*)?"></css-link>',
+        versioned_css_link,
+        markup,
+        count=1,
+    )
+    if css_link in markup:
+        markup = markup.replace(css_link, versioned_css_link, 1)
+    if markup != theme.read_text(encoding="utf-8"):
         theme.write_text(markup, encoding="utf-8")
 
 
