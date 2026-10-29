@@ -83,6 +83,11 @@ class GirlLifeHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def end_headers(self) -> None:
+        if getattr(self, "_serve_qsp_gzip", False):
+            self.send_header("Content-Encoding", "gzip")
+            original_size = getattr(self, "_original_qsp_size", None)
+            if original_size is not None:
+                self.send_header("X-Original-Content-Length", str(original_size))
         origin = self.headers.get("Origin", "")
         if origin == "https://girllife.mewcat.me" or re.fullmatch(
             r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?", origin
@@ -92,6 +97,29 @@ class GirlLifeHandler(SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         super().end_headers()
+
+    def send_head(self):
+        self._serve_qsp_gzip = False
+        route = urlsplit(self.path)
+        if route.path.lower().endswith(".qsp") and accepts_gzip(self.headers.get("Accept-Encoding", "")):
+            original_path = self.path
+            compressed_path = route.path + ".gz"
+            original_file = Path(self.translate_path(route.path))
+            if original_file.is_file() and Path(self.translate_path(compressed_path)).is_file():
+                self._original_qsp_size = original_file.stat().st_size
+                self.path = compressed_path + (f"?{route.query}" if route.query else "")
+                self._serve_qsp_gzip = True
+                try:
+                    return super().send_head()
+                finally:
+                    self.path = original_path
+        return super().send_head()
+
+    def guess_type(self, path: str) -> str:
+        if getattr(self, "_serve_qsp_gzip", False):
+            return "application/octet-stream"
+        return super().guess_type(path)
+
 
     def do_OPTIONS(self) -> None:
         if urlsplit(self.path).path.startswith("/api/"):
@@ -300,6 +328,19 @@ class GirlLifeHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         if body:
             self.wfile.write(body)
+
+
+def accepts_gzip(header: str) -> bool:
+    for item in header.split(","):
+        coding, *parameters = item.strip().lower().split(";")
+        if coding not in {"gzip", "*"}:
+            continue
+        try:
+            if all(not parameter.strip().startswith("q=") or float(parameter.strip()[2:]) > 0 for parameter in parameters):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 if __name__ == "__main__":

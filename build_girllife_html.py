@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import gzip
 import json
 import os
 import re
@@ -17,13 +18,55 @@ import zipfile
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
+from urllib.parse import urlsplit
 
 
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-4"
-LOAD_PROGRESS_VERSION = "girllife-loading-progress-v2"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-5"
+LOAD_PROGRESS_VERSION = "girllife-loading-progress-v3"
+GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
+    def send_head(self):
+        self._serve_qsp_gzip = False
+        parsed = urlsplit(self.path)
+        if parsed.path.lower().endswith(".qsp") and accepts_gzip(self.headers.get("Accept-Encoding", "")):
+            original_path = self.path
+            compressed_path = parsed.path + ".gz"
+            original_file = Path(self.translate_path(parsed.path))
+            if original_file.is_file() and Path(self.translate_path(compressed_path)).is_file():
+                self._original_qsp_size = original_file.stat().st_size
+                self.path = compressed_path + (f"?{parsed.query}" if parsed.query else "")
+                self._serve_qsp_gzip = True
+                try:
+                    return super().send_head()
+                finally:
+                    self.path = original_path
+        return super().send_head()
+
+    def guess_type(self, path):
+        if getattr(self, "_serve_qsp_gzip", False):
+            return "application/octet-stream"
+        return super().guess_type(path)
+
+    def end_headers(self):
+        if getattr(self, "_serve_qsp_gzip", False):
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("X-Original-Content-Length", str(self._original_qsp_size))
+        super().end_headers()
+
+def accepts_gzip(header):
+    for item in header.split(","):
+        coding, *parameters = item.strip().lower().split(";")
+        if coding not in {"gzip", "*"}:
+            continue
+        try:
+            if all(not parameter.strip().startswith("q=") or float(parameter.strip()[2:]) > 0 for parameter in parameters):
+                return True
+        except ValueError:
+            continue
+    return False
+'''
 
 LOAD_PROGRESS_STYLE = """
 #girllife-download-progress {
@@ -38,7 +81,7 @@ LOAD_PROGRESS_STYLE = """
 #girllife-download-meter { display: block; width: 100%; height: 10px; margin-top: 7px; accent-color: #7189ff; }
 """
 
-LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="girllife-loading-progress-v2" role="status" aria-live="polite">
+LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="girllife-loading-progress-v3" role="status" aria-live="polite">
   <span id="girllife-download-label">Preparing game…</span>
   <progress id="girllife-download-meter" max="100" value="0"></progress>
 </div>
@@ -50,6 +93,7 @@ LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="gi
   const requests = new Map();
   let nextId = 0;
   let hasStartedRequest = false;
+  let renderPending = false;
   const gameReady = () => document.title !== "qSpider" || document.querySelector("qsp-main-content");
   const formatBytes = value => value < 1048576
     ? `${Math.max(1, Math.round(value / 1024))} KB`
@@ -75,13 +119,18 @@ LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="gi
       label.textContent = `Downloading ${resource} — ${formatBytes(loaded)}`;
     }
   };
+  const scheduleRender = () => {
+    if (renderPending) return;
+    renderPending = true;
+    requestAnimationFrame(() => { renderPending = false; render(); });
+  };
   window.girllifeTrackedFetch = async (requestUrl, originalUrl = requestUrl) => {
     const response = await fetch(requestUrl);
     let path = "";
     try { path = new URL(typeof originalUrl === "string" ? originalUrl : originalUrl.url, location.href).pathname; } catch (_) {}
     if (!response.ok || !response.body || (!/\.qsp$/i.test(path) && !/\/(?:images|sound)\//i.test(path))) return response;
     const filename = decodeURIComponent(path.split("/").pop() || "game resource");
-    const item = {name: filename, loaded: 0, total: Number(response.headers.get("Content-Length")) || 0};
+    const item = {name: filename, loaded: 0, total: Number(response.headers.get("X-Original-Content-Length") || response.headers.get("Content-Length")) || 0};
     const id = ++nextId;
     hasStartedRequest = true;
     requests.set(id, item);
@@ -93,7 +142,7 @@ LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="gi
           const chunk = await reader.read();
           if (chunk.done) { controller.close(); requests.delete(id); render(); return; }
           item.loaded += chunk.value.byteLength;
-          render();
+          scheduleRender();
           controller.enqueue(chunk.value);
         } catch (error) {
           controller.error(error);
@@ -598,7 +647,8 @@ def apply_cloud_saves(output: Path) -> None:
         if "## 下載進度" not in contents and "## 素材\n" in contents:
             progress_note = (
                 "## 下載進度\n\n"
-                "遊戲本體或素材正在下載時，頁面會顯示下載進度；圖片、影片和音效只在遊戲要求時才由瀏覽器下載。\n\n"
+                "遊戲本體或素材正在下載時，頁面會顯示下載進度；圖片、影片和音效只在遊戲要求時才由瀏覽器下載。"
+                "建置器會建立可重用的 QSP gzip 壓縮副本，支援的伺服器會自動使用，原始 `.qsp` 保持不變。\n\n"
             )
             readme.write_text(contents.replace("## 素材\n", progress_note + "## 素材\n", 1), encoding="utf-8")
     ui = output / "cloud-saves-ui.js"
@@ -946,8 +996,83 @@ def write_file(path: Path, contents: str, executable: bool = False) -> None:
         path.chmod(path.stat().st_mode | 0o111)
 
 
+class GzipQSPHandler(SimpleHTTPRequestHandler):
+    def send_head(self):
+        self._serve_qsp_gzip = False
+        parsed = urlsplit(self.path)
+        if parsed.path.lower().endswith(".qsp") and accepts_gzip(self.headers.get("Accept-Encoding", "")):
+            original_path = self.path
+            compressed_path = parsed.path + ".gz"
+            original_file = Path(self.translate_path(parsed.path))
+            if original_file.is_file() and Path(self.translate_path(compressed_path)).is_file():
+                self._original_qsp_size = original_file.stat().st_size
+                self.path = compressed_path + (f"?{parsed.query}" if parsed.query else "")
+                self._serve_qsp_gzip = True
+                try:
+                    return super().send_head()
+                finally:
+                    self.path = original_path
+        return super().send_head()
+
+    def guess_type(self, path):
+        if getattr(self, "_serve_qsp_gzip", False):
+            return "application/octet-stream"
+        return super().guess_type(path)
+
+    def end_headers(self):
+        if getattr(self, "_serve_qsp_gzip", False):
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("X-Original-Content-Length", str(self._original_qsp_size))
+        super().end_headers()
+
+
+def accepts_gzip(header: str) -> bool:
+    for item in header.split(","):
+        coding, *parameters = item.strip().lower().split(";")
+        if coding not in {"gzip", "*"}:
+            continue
+        try:
+            if all(not parameter.strip().startswith("q=") or float(parameter.strip()[2:]) > 0 for parameter in parameters):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def ensure_compressed_qsp(output: Path) -> None:
+    for game in (output / "game").glob("*.qsp"):
+        compressed = game.with_suffix(game.suffix + ".gz")
+        if compressed.is_file() and compressed.stat().st_mtime_ns >= game.stat().st_mtime_ns:
+            continue
+        temporary = compressed.with_suffix(compressed.suffix + ".tmp")
+        try:
+            with game.open("rb") as source, temporary.open("wb") as raw_target:
+                with gzip.GzipFile(filename="", mode="wb", compresslevel=6, fileobj=raw_target, mtime=0) as target:
+                    shutil.copyfileobj(source, target, length=1024 * 1024)
+            os.replace(temporary, compressed)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def apply_gzip_qsp_server(output: Path) -> None:
+    script = output / "serve.py"
+    source = script.read_text(encoding="utf-8")
+    if "class GzipQSPHandler" not in source:
+        source = source.replace("from pathlib import Path\n", "from pathlib import Path\nfrom urllib.parse import urlsplit\n", 1)
+        source = source.replace("root = Path(__file__).resolve().parent", GZIP_QSP_HANDLER + "\nroot = Path(__file__).resolve().parent", 1)
+        source = source.replace("handler = partial(SimpleHTTPRequestHandler,", "handler = partial(GzipQSPHandler,", 1)
+        script.write_text(source, encoding="utf-8")
+    readme = output / "README.md"
+    if readme.is_file():
+        contents = readme.read_text(encoding="utf-8")
+        old = "遊戲本體或素材正在下載時，頁面會顯示下載進度；圖片、影片和音效只在遊戲要求時才由瀏覽器下載。"
+        new = old + "建置器會建立可重用的 QSP gzip 壓縮副本，支援的伺服器會自動使用，原始 `.qsp` 保持不變。"
+        if old in contents and new not in contents:
+            readme.write_text(contents.replace(old, new, 1), encoding="utf-8")
+
+
 def serve_local_site(output: Path) -> None:
-    handler = partial(SimpleHTTPRequestHandler, directory=str(output))
+    handler = partial(GzipQSPHandler, directory=str(output))
     with ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
         url = f"http://127.0.0.1:{server.server_port}/"
         print(f"本機網站已啟動：{url}", flush=True)
@@ -1019,6 +1144,8 @@ def main() -> int:
         print(f"找到既有產物，不覆蓋：{output}")
         apply_cloud_saves(output)
         apply_loading_progress(output)
+        ensure_compressed_qsp(output)
+        apply_gzip_qsp_server(output)
         missing_by_kind, missing_references = audit_missing_media(
             game, output / "game" / "images", output / "game" / "sound"
         )
@@ -1051,6 +1178,7 @@ def main() -> int:
             game_dir = output / "game"
             game_dir.mkdir(exist_ok=True)
             shutil.copy2(game, game_dir / game.name)
+            ensure_compressed_qsp(output)
             config = (
                 "[[game]]\n"
                 f"id = {json.dumps('girllife-' + hashlib.sha256(game.name.encode()).hexdigest()[:16])}\n"
@@ -1084,10 +1212,40 @@ def main() -> int:
             write_file(output / "serve.py", '''from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 import webbrowser
 
+class GzipQSPHandler(SimpleHTTPRequestHandler):
+    def send_head(self):
+        self._serve_qsp_gzip = False
+        parsed = urlsplit(self.path)
+        if parsed.path.lower().endswith(".qsp") and "gzip" in self.headers.get("Accept-Encoding", "").lower():
+            original_path = self.path
+            compressed_path = parsed.path + ".gz"
+            original_file = Path(self.translate_path(parsed.path))
+            if original_file.is_file() and Path(self.translate_path(compressed_path)).is_file():
+                self._original_qsp_size = original_file.stat().st_size
+                self.path = compressed_path + (f"?{parsed.query}" if parsed.query else "")
+                self._serve_qsp_gzip = True
+                try:
+                    return super().send_head()
+                finally:
+                    self.path = original_path
+        return super().send_head()
+
+    def guess_type(self, path):
+        if getattr(self, "_serve_qsp_gzip", False):
+            return "application/octet-stream"
+        return super().guess_type(path)
+
+    def end_headers(self):
+        if getattr(self, "_serve_qsp_gzip", False):
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("X-Original-Content-Length", str(self._original_qsp_size))
+        super().end_headers()
+
 root = Path(__file__).resolve().parent
-handler = partial(SimpleHTTPRequestHandler, directory=str(root))
+handler = partial(GzipQSPHandler, directory=str(root))
 with ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
     url = f"http://127.0.0.1:{server.server_port}/"
     print(f"本機網站已啟動：{url}", flush=True)
@@ -1099,6 +1257,7 @@ with ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
     except KeyboardInterrupt:
         print("本機網站已停止。", flush=True)
 ''')
+            apply_gzip_qsp_server(output)
             write_file(output / "Launch.command", '''#!/bin/sh
 cd "$(dirname "$0")"
 exec python3 serve.py
@@ -1128,11 +1287,11 @@ if errorlevel 1 pause
 {image_source_note}
 {patch_note}
 {sound_note}
-圖片與音效在同一磁碟時會以檔案硬連結加入輸出，無法硬連結時改為複製。qSpider 只會在遊戲要求圖片、影片或音效時下載該項素材，不會預先下載整個素材庫。
+圖片與音效在同一磁碟時會以檔案硬連結加入輸出，無法硬連結時改為複製。qSpider 只會在遊戲要求圖片、影片或音效時下載該項素材，不會預先下載整個素材庫。伺服器支援 gzip 時會傳送預壓縮的 QSP，原始 `.qsp` 保留不變。
 
 ## 下載進度
 
-遊戲本體或素材正在下載時，頁面會顯示下載進度；網頁初次啟動仍需完整載入 QSP 遊戲本體。
+遊戲本體或素材正在下載時，頁面會顯示下載進度；網頁初次啟動仍需完整載入 QSP 遊戲本體。建置時會建立可重用的 `.qsp.gz`，支援 gzip 的伺服器傳輸量較小。
 
 ## 播放器授權
 
