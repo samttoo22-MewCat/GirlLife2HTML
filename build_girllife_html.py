@@ -24,8 +24,8 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-5"
-LOAD_PROGRESS_VERSION = "girllife-loading-progress-v3"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-6"
+LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
         self._serve_qsp_gzip = False
@@ -81,7 +81,7 @@ LOAD_PROGRESS_STYLE = """
 #girllife-download-meter { display: block; width: 100%; height: 10px; margin-top: 7px; accent-color: #7189ff; }
 """
 
-LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="girllife-loading-progress-v3" role="status" aria-live="polite">
+LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="__VERSION__" role="status" aria-live="polite">
   <span id="girllife-download-label">Preparing game…</span>
   <progress id="girllife-download-meter" max="100" value="0"></progress>
 </div>
@@ -91,9 +91,11 @@ LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="gi
   const label = document.getElementById("girllife-download-label");
   const meter = document.getElementById("girllife-download-meter");
   const requests = new Map();
+  const nativeFetch = window.fetch.bind(window);
   let nextId = 0;
   let hasStartedRequest = false;
   let renderPending = false;
+  let startedAt = 0;
   const gameReady = () => document.title !== "qSpider" || document.querySelector("qsp-main-content");
   const formatBytes = value => value < 1048576
     ? `${Math.max(1, Math.round(value / 1024))} KB`
@@ -103,7 +105,7 @@ LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="gi
     panel.hidden = active.length === 0 && hasStartedRequest && gameReady();
     if (!active.length) {
       meter.removeAttribute("value");
-      label.textContent = "Preparing game…";
+      label.textContent = hasStartedRequest ? "Preparing game… 0s" : "Preparing game…";
       return;
     }
     const loaded = active.reduce((sum, item) => sum + item.loaded, 0);
@@ -124,8 +126,8 @@ LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="gi
     renderPending = true;
     requestAnimationFrame(() => { renderPending = false; render(); });
   };
-  window.girllifeTrackedFetch = async (requestUrl, originalUrl = requestUrl) => {
-    const response = await fetch(requestUrl);
+  window.girllifeTrackedFetch = async (requestUrl, originalUrl = requestUrl, init) => {
+    const response = await nativeFetch(requestUrl, init);
     let path = "";
     try { path = new URL(typeof originalUrl === "string" ? originalUrl : originalUrl.url, location.href).pathname; } catch (_) {}
     if (!response.ok || !response.body || (!/\.qsp$/i.test(path) && !/\/(?:images|sound)\//i.test(path))) return response;
@@ -133,6 +135,7 @@ LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="gi
     const item = {name: filename, loaded: 0, total: Number(response.headers.get("X-Original-Content-Length") || response.headers.get("Content-Length")) || 0};
     const id = ++nextId;
     hasStartedRequest = true;
+    startedAt = performance.now();
     requests.set(id, item);
     render();
     const reader = response.body.getReader();
@@ -154,12 +157,17 @@ LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="gi
     });
     return new Response(stream, {status: response.status, statusText: response.statusText, headers: response.headers});
   };
+  window.fetch = (requestUrl, init) => window.girllifeTrackedFetch(requestUrl, requestUrl, init);
   const readyObserver = new MutationObserver(() => {
-    if (gameReady()) { render(); readyObserver.disconnect(); }
+    if (gameReady()) { render(); readyObserver.disconnect(); clearInterval(ticker); }
   });
   readyObserver.observe(document.documentElement, {subtree: true, childList: true, characterData: true});
+  const ticker = setInterval(() => {
+    if (!hasStartedRequest || gameReady()) return;
+    if (requests.size === 0) label.textContent = `Preparing game… ${Math.round((performance.now() - startedAt) / 1000)}s`;
+  }, 1000);
 })();
-</script>'''
+</script>'''.replace("__VERSION__", LOAD_PROGRESS_VERSION)
 
 CLOUD_SAVE_UI_JS = r'''(() => {
   const dialog = document.createElement("dialog");
@@ -601,7 +609,13 @@ def apply_cloud_saves(output: Path) -> None:
     bundle = bundle_files[0]
     source = bundle.read_text(encoding="utf-8")
     marker = "let instance$1=null;function getStorage()"
-    player_patch = CLOUD_SAVE_PLAYER_JS.replace("__API_URL__", json.dumps(CLOUD_SAVE_API_URL))
+    if "__API_URL__" not in CLOUD_SAVE_PLAYER_JS:
+        raise RuntimeError("Cloud-save API placeholder is missing from the player hook.")
+    if '"' in CLOUD_SAVE_API_URL or "\\" in CLOUD_SAVE_API_URL:
+        raise RuntimeError("Cloud-save API URL contains characters that need escaping.")
+    player_patch = CLOUD_SAVE_PLAYER_JS.replace("__API_URL__", CLOUD_SAVE_API_URL)
+    if '""http' in player_patch:
+        raise RuntimeError("Cloud-save hook would inject malformed string quoting.")
     if "girllifeCloudToken" in source:
         start = source.find("let girllifeCloudToken = null;")
         end = source.find(marker, start)
@@ -677,10 +691,9 @@ def apply_loading_progress(output: Path) -> None:
     source = bundle.read_text(encoding="utf-8")
     original = "function fetchProxyFallback($){return fetch($).catch(()=>fetch(PROXY_URL+window.btoa($)))}"
     replacement = "function fetchProxyFallback($){return window.girllifeTrackedFetch($,$).catch(()=>window.girllifeTrackedFetch(PROXY_URL+window.btoa($),$))}"
-    if "window.girllifeTrackedFetch($,$)" not in source:
-        if source.count(original) != 1:
-            raise RuntimeError("qSpider download hook changed; download progress was not installed.")
-        bundle.write_text(source.replace(original, replacement, 1), encoding="utf-8")
+    if replacement in source:
+        source = source.replace(replacement, original, 1)
+        bundle.write_text(source, encoding="utf-8")
 
     index = output / "index.html"
     markup = index.read_text(encoding="utf-8")
