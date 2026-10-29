@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlsplit
 ROOT = Path(__file__).resolve().parent
 DATABASE = Path(os.environ.get("GIRLLIFE_SAVE_DATABASE", "/var/lib/girl-life-saves/saves.sqlite3"))
 MAX_REQUEST_BYTES = 6 * 1024 * 1024
+MAX_PASSWORD_CHARACTERS = 1024
 MAX_SAVE_BYTES = 4 * 1024 * 1024
 MAX_ACCOUNT_SAVES = 512
 MAX_ACCOUNT_STORAGE_BYTES = 256 * 1024 * 1024
@@ -183,6 +184,9 @@ class GirlLifeHandler(SimpleHTTPRequestHandler):
             return
         if not isinstance(password, str) or not password:
             self.send_json(400, {"error": "Password is required"})
+            return
+        if len(password) > MAX_PASSWORD_CHARACTERS:
+            self.send_json(400, {"error": "Password must be 1024 characters or fewer"})
             return
         salt = secrets.token_bytes(16)
         with database() as connection:
