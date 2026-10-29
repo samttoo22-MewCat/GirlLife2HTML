@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-7"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-8"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -176,8 +176,8 @@ CLOUD_SAVE_UI_JS = r'''(() => {
     <form method="dialog">
       <h2>Cloud save account</h2>
       <label>Account name<input name="username" autocomplete="username" minlength="3" maxlength="32" required></label>
-      <label>Password<input name="password" type="password" autocomplete="current-password" minlength="12" required></label>
-      <label class="confirm-password">Confirm password<input name="confirm" type="password" autocomplete="new-password" minlength="12"></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <label class="confirm-password">Confirm password<input name="confirm" type="password" autocomplete="new-password"></label>
       <p aria-live="polite"></p>
       <div class="cloud-account-actions">
         <button type="button" data-mode="login">Sign in</button>
@@ -210,7 +210,7 @@ CLOUD_SAVE_UI_JS = r'''(() => {
       }
       if (mode === "create" && dialog.dataset.create !== "true") {
         dialog.dataset.create = "true";
-        dialog.querySelector("p").textContent = "Choose a password of at least 12 characters, then confirm it.";
+        dialog.querySelector("p").textContent = "Choose a password, then confirm it.";
         form.elements.confirm.focus();
         return;
       }
@@ -222,8 +222,8 @@ CLOUD_SAVE_UI_JS = r'''(() => {
         message.textContent = "Enter an account name and password.";
         return;
       }
-      if (mode === "create" && (password.length < 12 || password !== values.get("confirm"))) {
-        message.textContent = "Use at least 12 characters and make both passwords match.";
+      if (mode === "create" && password !== values.get("confirm")) {
+        message.textContent = "Both passwords must match.";
         return;
       }
       const result = {mode, username, password};
@@ -642,16 +642,20 @@ def apply_cloud_saves(output: Path) -> None:
     index = output / "index.html"
     markup = index.read_text(encoding="utf-8")
     original_markup = markup
-    script = '<script src="./cloud-saves-ui.js" defer></script>'
+    script = f'<script src="./cloud-saves-ui.js?v={CLOUD_SAVE_CACHE_VERSION}" defer></script>'
     if CLOUD_SAVE_CACHE_VERSION not in markup:
         pattern = r'(<script type="module" crossorigin src="[^"]+?\.js)(?:\?v=[^"]*)?(">)'
         if len(re.findall(pattern, markup)) != 1:
             raise RuntimeError("Could not refresh the cached qSpider player bundle URL.")
         markup = re.sub(pattern, rf'\1?v={CLOUD_SAVE_CACHE_VERSION}\2', markup, count=1)
     if script not in markup:
-        if markup.count("</head>") != 1:
+        ui_pattern = r'<script src="\./cloud-saves-ui\.js(?:\?v=[^"]*)?" defer></script>'
+        if re.search(ui_pattern, markup):
+            markup = re.sub(ui_pattern, script, markup, count=1)
+        elif markup.count("</head>") == 1:
+            markup = markup.replace("</head>", f"    {script}\n  </head>", 1)
+        else:
             raise RuntimeError("Could not add the cloud account dialog to the player page.")
-        markup = markup.replace("</head>", f"    {script}\n  </head>", 1)
     if markup != original_markup:
         index.write_text(markup, encoding="utf-8")
 
@@ -666,7 +670,7 @@ def apply_cloud_saves(output: Path) -> None:
             )
             readme.write_text(contents.replace("## 素材\n", progress_note + "## 素材\n", 1), encoding="utf-8")
     ui = output / "cloud-saves-ui.js"
-    if not ui.exists():
+    if not ui.is_file() or ui.read_text(encoding="utf-8") != CLOUD_SAVE_UI_JS:
         write_file(ui, CLOUD_SAVE_UI_JS)
 
     for theme_name in ("aero.html", "classic.html"):

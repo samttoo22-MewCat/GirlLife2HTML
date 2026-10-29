@@ -181,8 +181,8 @@ class GirlLifeHandler(SimpleHTTPRequestHandler):
         if not isinstance(username, str) or not USERNAME.fullmatch(username):
             self.send_json(400, {"error": "Account names must be 3-32 letters, numbers, dots, dashes, or underscores"})
             return
-        if not isinstance(password, str) or len(password) < 12 or len(password) > 1024:
-            self.send_json(400, {"error": "Password must contain at least 12 characters"})
+        if not isinstance(password, str) or not password:
+            self.send_json(400, {"error": "Password is required"})
             return
         salt = secrets.token_bytes(16)
         with database() as connection:
