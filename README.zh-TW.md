@@ -1,0 +1,80 @@
+# Girl Life HTML 建置器
+
+English documentation: [README.md](README.md)
+
+使用官方 QSPFoundation qSpider 播放器，將原始英文版 Girl Life QSP 遊戲打包成可在瀏覽器執行的本機網站。
+
+此 repo 只包含建置工具，不包含遊戲本體、圖片、音效或生成後的遊戲包。請自行放入你有權使用的遊戲與素材。
+
+## 需求
+
+- macOS 或 Windows 10/11
+- 英文 `.qsp` 遊戲檔
+- `images/` 資料夾或可辨識的圖片 ZIP
+- `sound/` 資料夾或選用的音效 ZIP
+- 首次建置需要網路，以下載 qSpider v1.3.1 播放器
+
+啟動器會先檢查是否已有 Python 3.10 以上版本。若沒有，會先詢問是否從 [python.org](https://www.python.org/downloads/) 下載官方安裝程式；輸入 `y` 才繼續，直接按 Enter 則取消。下載後會驗證安裝程式簽章才開啟或執行。macOS 會打開系統安裝介面；Windows 只安裝到目前使用者，不要求系統管理員權限。
+
+不需要安裝第三方 Python 套件。
+
+## 資料夾配置
+
+將建置器檔案與英文 `.qsp`、素材放在一起：
+
+```text
+GirlLife/
+├── Build-GirlLife-HTML.bat
+├── Build-GirlLife-HTML.ps1
+├── Build-GirlLife-HTML.sh
+├── build_girllife_html.py
+├── Girl Life 0.9.9.2.qsp
+├── images/
+└── sound/                 # 可選；未提供時遊戲沒有音效
+```
+
+建置器只會選擇檔名不含 `_cn` 的英文 `.qsp`。若找到多個，會詢問要使用哪個。若遊戲資料夾沒有 `sound/`，但上一層只有一個相鄰的 `sound/` 資料夾，也會採用它。
+
+## 建置與執行
+
+### macOS
+
+在 Terminal 執行：
+
+```sh
+./Build-GirlLife-HTML.sh
+```
+
+如果系統提示腳本沒有執行權限：
+
+```sh
+chmod +x Build-GirlLife-HTML.sh
+./Build-GirlLife-HTML.sh
+```
+
+### Windows
+
+雙擊 `Build-GirlLife-HTML.bat`。它會呼叫附帶的 PowerShell 啟動器，檢查 Python；需要下載時先詢問同意，再執行建置。
+
+建置器會在同一層建立 `<英文遊戲檔名>_HTML` 資料夾，統計缺失素材，接著啟動動態埠號的本機網站、顯示網址並嘗試開啟瀏覽器。遊玩期間請保留啟動器視窗開啟；按 `Ctrl+C` 停止網站。
+
+若有效的輸出資料夾已存在，建置器會保留它，改為檢查並啟動既有產物，不會覆寫。
+
+## 素材偵測與缺失檔案
+
+- 有 `images/` 時優先使用資料夾，不解壓圖片 ZIP；沒有資料夾時可選擇匹配的 ZIP 並安全解壓。
+- 有 `sound/` 時使用資料夾；否則可選擇音效 ZIP。兩者皆無時，遊戲仍可執行但沒有音效。
+- 遊戲資料夾或上一層中，檔名同時包含 `image` 與 `bugfix`、`patch`、`update` 任一字樣的 ZIP 會視為圖片更新包。重複內容會去重；若同時有不同更新包會停止，避免套錯版本。
+- 缺少的素材引用會略過，不會建立假檔。
+- 最後的統計會列出可辨識的 `images/`、`sound/` 固定路徑之唯一缺檔數、引用次數，以及圖片／影片／音效分類。由 QSP 變數或字串動態組合的路徑無法由靜態掃描計數。
+- ZIP 解壓會拒絕不安全路徑、符號連結、重複路徑和超過大小限制的壓縮檔。不支援 RAR 或 7z。
+
+原始 `.qsp`、素材資料夾和素材壓縮檔會保留不變。若磁碟支援，輸出素材會使用硬連結；否則複製。圖片更新只套用到輸出包。
+
+## 修復範圍
+
+此工具以 qSpider 執行原始 QSP，並不會改寫遊戲或修復 QSP 內部的遊戲邏輯缺陷。缺失素材會回報並略過；原始遊戲邏輯中的問題仍然存在。
+
+## 授權
+
+此 repo 未對建置器額外授予授權。qSpider 使用 MIT License；完整授權文字會放在生成包的 `QSPIDER-LICENSE.txt`。請參閱 [qSpider v1.3.1 release](https://github.com/QSPFoundation/qspider/releases/tag/v1.3.1)。

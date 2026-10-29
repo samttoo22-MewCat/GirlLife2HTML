@@ -1,16 +1,20 @@
 # Girl Life HTML Builder
 
+繁體中文說明：[README.zh-TW.md](README.zh-TW.md)
+
 Build and run a browser-playable package of the original English Girl Life QSP game using the official QSPFoundation qSpider player.
 
-This repository contains the builder only. It does not include the game, images, sounds, or generated game package. You must provide the game and assets you are authorized to use.
+This repository contains the builder only. It does not include the game, images, sounds, or generated game package. Provide the game and assets you are authorized to use.
 
 ## Requirements
 
-- Python 3.10 or newer
-- Internet access on the first build, to download the qSpider v1.3.1 standalone player and verify its SHA-256 checksum
-- A local English `.qsp` game file
+- macOS or Windows 10/11
+- An English `.qsp` game file
 - An `images/` directory or a recognized image ZIP archive
 - A `sound/` directory or, optionally, a recognized sound ZIP archive
+- Internet access for the first build, to download the qSpider v1.3.1 player
+
+The launchers check for Python 3.10 or newer. If none is available, they ask before downloading the official installer from [python.org](https://www.python.org/downloads/). Answer `y` to continue or press Enter to cancel. The downloaded installer is signature-checked before it is opened or run. macOS then opens its installer UI; Windows installs Python for the current user. No administrator access is requested by the Windows install command.
 
 No third-party Python packages are required.
 
@@ -21,14 +25,15 @@ Put the builder files beside the English `.qsp` file and its assets:
 ```text
 GirlLife/
 ├── Build-GirlLife-HTML.bat
+├── Build-GirlLife-HTML.ps1
 ├── Build-GirlLife-HTML.sh
 ├── build_girllife_html.py
 ├── Girl Life 0.9.9.2.qsp
 ├── images/
-└── sound/                 # optional; audio will be absent if not provided
+└── sound/                 # optional; audio is absent if not provided
 ```
 
-The builder selects an English `.qsp` file (one whose filename does not contain `_cn`). If there is more than one, it asks you to choose. It can also use a `sound/` folder in the parent directory when that is the only adjacent sound folder it finds.
+The builder selects an English `.qsp` file (its filename must not contain `_cn`). If there is more than one, it asks you to choose. It can also use a `sound/` folder in the parent directory when that is the only adjacent sound folder it finds.
 
 ## Build and run
 
@@ -49,9 +54,9 @@ chmod +x Build-GirlLife-HTML.sh
 
 ### Windows
 
-Double-click `Build-GirlLife-HTML.bat`. It uses the Python launcher (`py -3`) when available, then falls back to `python`.
+Double-click `Build-GirlLife-HTML.bat`. It uses the included PowerShell launcher to check, request consent for, and if needed install Python before running the builder. PowerShell is included with supported Windows versions.
 
-The builder creates a sibling folder named `<English game filename>_HTML`, reports missing media, starts a local web server on a dynamically assigned port, prints the local URL, and tries to open it in your browser. Keep the builder window open while playing. Press `Ctrl+C` in that window to stop the server.
+The builder creates a sibling folder named `<English game filename>_HTML`, reports missing media, starts a local web server on a dynamically assigned port, prints the local URL, and tries to open it in your browser. Keep the launcher window open while playing. Press `Ctrl+C` in that window to stop the server.
 
 If a valid output folder already exists, it is preserved. The builder audits and serves that existing package rather than overwriting it.
 
