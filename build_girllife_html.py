@@ -21,6 +21,344 @@ from pathlib import Path, PurePosixPath
 
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
+CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-2"
+
+CLOUD_SAVE_UI_JS = r'''(() => {
+  const dialog = document.createElement("dialog");
+  dialog.className = "cloud-account-dialog";
+  dialog.innerHTML = `
+    <form method="dialog">
+      <h2>Cloud save account</h2>
+      <label>Account name<input name="username" autocomplete="username" minlength="3" maxlength="32" required></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" minlength="12" required></label>
+      <label class="confirm-password">Confirm password<input name="confirm" type="password" autocomplete="new-password" minlength="12"></label>
+      <p aria-live="polite"></p>
+      <div class="cloud-account-actions">
+        <button type="button" data-mode="login">Sign in</button>
+        <button type="button" data-mode="create">Create account</button>
+        <button type="button" data-mode="cancel">Cancel</button>
+      </div>
+    </form>`;
+  const style = document.createElement("style");
+  style.textContent = `
+    .cloud-account-dialog { width:min(92vw, 420px); border:0; border-radius:12px; padding:22px; color:#171717; background:#fff; }
+    .cloud-account-dialog::backdrop { background:rgb(0 0 0 / 65%); }
+    .cloud-account-dialog h2 { margin:0 0 16px; font:600 1.3rem/1.3 system-ui,sans-serif; }
+    .cloud-account-dialog label { display:block; margin:12px 0; font:500 1rem/1.4 system-ui,sans-serif; }
+    .cloud-account-dialog input { display:block; box-sizing:border-box; width:100%; min-height:44px; margin-top:5px; padding:9px; font:16px system-ui,sans-serif; }
+    .cloud-account-dialog p { min-height:1.4em; color:#a11; font:14px system-ui,sans-serif; }
+    .cloud-account-actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .cloud-account-actions button { min-height:44px; padding:8px 12px; font:600 15px system-ui,sans-serif; }
+    .cloud-account-dialog:not([data-create="true"]) .confirm-password { display:none; }
+  `;
+  document.head.append(style);
+  document.body.append(dialog);
+  const form = dialog.querySelector("form");
+  let finish = null;
+  dialog.querySelectorAll("button[data-mode]").forEach(button => {
+    button.addEventListener("click", () => {
+      const mode = button.dataset.mode;
+      if (mode === "cancel") {
+        dialog.close();
+        return;
+      }
+      if (mode === "create" && dialog.dataset.create !== "true") {
+        dialog.dataset.create = "true";
+        dialog.querySelector("p").textContent = "Choose a password of at least 12 characters, then confirm it.";
+        form.elements.confirm.focus();
+        return;
+      }
+      const values = new FormData(form);
+      const username = String(values.get("username") || "").trim();
+      const password = String(values.get("password") || "");
+      const message = dialog.querySelector("p");
+      if (username.length < 3 || !password) {
+        message.textContent = "Enter an account name and password.";
+        return;
+      }
+      if (mode === "create" && (password.length < 12 || password !== values.get("confirm"))) {
+        message.textContent = "Use at least 12 characters and make both passwords match.";
+        return;
+      }
+      const result = {mode, username, password};
+      const resolve = finish;
+      finish = null;
+      dialog.close();
+      resolve?.(result);
+    });
+  });
+  dialog.addEventListener("close", () => {
+    if (finish) {
+      const resolve = finish;
+      finish = null;
+      resolve(null);
+    }
+  });
+  window.girllifeCloudCredentials = () => new Promise(resolve => {
+    finish = resolve;
+    form.reset();
+    dialog.dataset.create = "false";
+    dialog.querySelector("p").textContent = "";
+    dialog.showModal();
+    form.elements.username.focus();
+  });
+})();
+'''
+
+CLOUD_SAVE_PLAYER_JS = r'''/* GirlLife cloud saves v2 */
+let girllifeCloudToken = null;
+async function cloudEnsureSession() {
+  if (girllifeCloudToken) return true;
+  const credentials = await window.girllifeCloudCredentials?.();
+  if (!credentials) return false;
+  const route = credentials.mode === "create" ? "/accounts" : "/sessions";
+  try {
+    const response = await fetch("__API_URL__" + route, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username: credentials.username, password: credentials.password})
+    });
+    const result = await response.json();
+    if (!response.ok) { window.alert(result.error || "Cloud account request failed."); return false; }
+    girllifeCloudToken = result.token;
+    return true;
+  } catch (_) { window.alert("The cloud save service could not be reached."); return false; }
+}
+function cloudBase64(data) {
+  const bytes = new Uint8Array(data);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
+  return btoa(binary);
+}
+function cloudFromBase64(value) {
+  const binary = atob(value), bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+async function cloudRequest(method, game, identity, data) {
+  const query = new URLSearchParams({game_id: game, ...identity});
+  let response;
+  try {
+    response = await fetch("__API_URL__/saves?" + query, {
+      method, headers: {Authorization: "Bearer " + girllifeCloudToken, ...(data ? {"Content-Type": "application/json"} : {})},
+      ...(data ? {body: JSON.stringify({data: cloudBase64(data)})} : {})
+    });
+  } catch (_) { window.alert("The cloud save service could not be reached."); throw new Error("Cloud save service unavailable"); }
+  if (response.status === 404) return null;
+  if (response.status === 401) {
+    girllifeCloudToken = null;
+    if (await cloudEnsureSession()) return cloudRequest(method, game, identity, data);
+    return null;
+  }
+  if (!response.ok) { const result = await response.json().catch(() => ({})); window.alert(result.error || "Cloud save request failed."); throw new Error(result.error || "Cloud save request failed."); }
+  return response.status === 204 ? true : response.json();
+}
+async function cloudReady() { return await cloudEnsureSession(); }
+WebStorage.prototype.saveBySlot = async function(game, slot, data) {
+  if (await cloudReady()) await cloudRequest("PUT", game, {slot: String(slot)}, data);
+};
+WebStorage.prototype.saveByKey = async function(game, key, data) {
+  if (await cloudReady()) await cloudRequest("PUT", game, {key}, data);
+};
+WebStorage.prototype.getSavedSlots = async function(game) {
+  if (!girllifeCloudToken) return [];
+  const rows = await cloudRequest("GET", game, {}, null);
+  return (rows || []).filter(row => row.slot > 0 && !row.key).map(row => ({game_id: game, slot: row.slot, key: "", timestamp: row.timestamp}));
+};
+WebStorage.prototype.getNamedSaves = async function(game) {
+  if (!girllifeCloudToken) return [];
+  const rows = await cloudRequest("GET", game, {}, null);
+  return (rows || []).filter(row => row.key).map(row => ({game_id: game, slot: -1, key: row.key, timestamp: row.timestamp}));
+};
+WebStorage.prototype.hasSaveBySlot = async function(game, slot) {
+  if (!(await cloudReady())) return false;
+  return (await cloudRequest("GET", game, {slot: String(slot)}, null)) !== null;
+};
+WebStorage.prototype.hasSaveByKey = async function(game, key) {
+  if (!(await cloudReady())) return false;
+  return (await cloudRequest("GET", game, {key}, null)) !== null;
+};
+WebStorage.prototype.getSaveDataBySlot = async function(game, slot) {
+  if (!(await cloudReady())) return null;
+  const result = await cloudRequest("GET", game, {slot: String(slot)}, null);
+  return result ? cloudFromBase64(result.data) : null;
+};
+WebStorage.prototype.getSaveDataByKey = async function(game, key) {
+  if (!(await cloudReady())) return null;
+  const result = await cloudRequest("GET", game, {key}, null);
+  return result ? cloudFromBase64(result.data) : null;
+};
+WebStorage.prototype.clearSaveSlot = async function(game, slot) {
+  if (await cloudReady()) await cloudRequest("DELETE", game, {slot: String(slot)}, null);
+};
+WebStorage.prototype.clearSaveKey = async function(game, key) {
+  if (await cloudReady()) await cloudRequest("DELETE", game, {key}, null);
+};
+'''
+
+MOBILE_LAYOUT_CSS = """
+
+/* Reflow the Aero interface for readable phone screens. */
+.mobile-panel-control {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .aero-theme {
+    position: relative;
+    display: block;
+    width: 100vw;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  .main-block {
+    width: 100vw;
+    min-width: 0;
+    max-width: 100vw;
+    height: 100dvh;
+    min-height: 0;
+    max-height: 100dvh;
+    background-size: contain;
+  }
+  .mobile-panel-control {
+    display: block;
+    position: absolute;
+    z-index: 1000;
+    top: max(8px, env(safe-area-inset-top));
+    left: 8px;
+    right: 8px;
+  }
+  .mobile-panel-select {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color, #777);
+    border-radius: 6px;
+    background: var(--background-color, #fff);
+    color: var(--background-color-contrast, #111);
+    font: 16px system-ui, sans-serif;
+  }
+  qsp-main {
+    left: 8px;
+    top: calc(max(8px, env(safe-area-inset-top)) + 56px);
+    width: calc(100% - 16px);
+    height: calc(100dvh - 42dvh - 82px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow: auto;
+    background-size: 100% 100%;
+  }
+  qsp-main qsp-scrollable,
+  qsp-actions qsp-scrollable,
+  qsp-objects qsp-scrollable,
+  qsp-stats qsp-scrollable {
+    height: 100%;
+  }
+  qsp-main-content {
+    font-size: clamp(16px, 4vw, 20px) !important;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+  qsp-main-content img,
+  qsp-main-content video,
+  qsp-view img,
+  qsp-view video {
+    display: block;
+    max-width: 100%;
+    max-height: 55dvh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    margin-inline: auto;
+  }
+  qsp-view img,
+  qsp-view video {
+    max-width: calc(100vw - 24px);
+    max-height: calc(100dvh - 48px);
+  }
+  qsp-view {
+    position: fixed;
+    inset: 0;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 900;
+    background: rgb(0 0 0 / 55%);
+  }
+  .regular-actions {
+    left: 8px;
+    bottom: calc(50px + env(safe-area-inset-bottom));
+    top: auto;
+    width: calc(100% - 16px);
+    height: 30dvh;
+    overflow: auto;
+    background-size: 100% 100%;
+  }
+  .integrated-actions {
+    width: 100%;
+    height: auto;
+    max-height: 30dvh;
+    overflow: auto;
+  }
+  .action-item {
+    min-height: 44px;
+    padding: 8px 4px;
+    font-size: 16px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  qsp-cmd {
+    left: 8px;
+    right: 8px;
+    bottom: max(6px, env(safe-area-inset-bottom));
+    top: auto;
+    width: auto;
+    height: 38px;
+  }
+  qsp-cmd input {
+    font-size: 16px;
+  }
+  qsp-stats,
+  qsp-objects {
+    display: none !important;
+    box-sizing: border-box;
+    position: absolute;
+    z-index: 100;
+    left: 8px;
+    right: 8px;
+    top: calc(max(8px, env(safe-area-inset-top)) + 58px);
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    width: auto;
+    height: auto;
+    padding: 12px;
+    overflow: auto;
+    background: var(--background-color, #fff);
+    box-shadow: 0 4px 20px rgb(0 0 0 / 35%);
+  }
+  .aero-theme:has(.mobile-panel-select option[value="objects"]:checked) qsp-objects,
+  .aero-theme:has(.mobile-panel-select option[value="stats"]:checked) qsp-stats {
+    display: block !important;
+  }
+  qsp-stats-content,
+  qsp-objects-list {
+    font-size: clamp(16px, 4vw, 20px);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+  .qsp-dialog-container {
+    width: 100vw;
+    height: 100dvh;
+  }
+  .qsp-dialog-container > * {
+    max-width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+}
+"""
+
 MEDIA_PATH_RE = re.compile(
     r"(?i)(?P<path>(?:images|sound)[/\\][^\"'<>|,;\r\n]*?\.(?:jpg|jpeg|png|gif|bmp|webp|mp3|ogg|wav|mp4|webm))(?=$|[\s\"'<>|,;)&])"
 )
@@ -83,6 +421,104 @@ def unpack_player(archive_path: Path, destination: Path) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(entry) as source, target.open("xb") as output:
                 shutil.copyfileobj(source, output)
+
+
+def apply_mobile_layout(output: Path) -> None:
+    stylesheet = output / "themes" / "aero.css"
+    if not stylesheet.is_file():
+        raise RuntimeError("qSpider Aero stylesheet is missing; cannot enable phone layout.")
+    current = stylesheet.read_text(encoding="utf-8")
+    legacy_marker = "/* Fit the fixed-coordinate Aero game canvas"
+    if legacy_marker in current:
+        current = current.split(legacy_marker, 1)[0].rstrip()
+    mobile_marker = "/* Reflow the Aero interface for readable phone screens. */"
+    if mobile_marker in current:
+        current = current.split(mobile_marker, 1)[0].rstrip()
+    old_control_rule = ".mobile-panel-control {\n  display: none;\n}"
+    while current.endswith(old_control_rule):
+        current = current[: -len(old_control_rule)].rstrip()
+    stylesheet.write_text(current + MOBILE_LAYOUT_CSS, encoding="utf-8")
+
+    theme = output / "themes" / "aero.html"
+    if not theme.is_file():
+        raise RuntimeError("qSpider Aero theme is missing; cannot add the phone panel menu.")
+    markup = theme.read_text(encoding="utf-8")
+    control_marker = '<div class="mobile-panel-control">'
+    if control_marker not in markup:
+        control = '''<div class="mobile-panel-control">
+          <select class="mobile-panel-select" aria-label="Open a side panel">
+            <option value="closed" selected>Side panel: closed</option>
+            <option value="objects">Items</option>
+            <option value="stats">Stats</option>
+          </select>
+        </div>
+        '''
+        markup = markup.replace('<div class="main-block">', control + '<div class="main-block">', 1)
+        theme.write_text(markup, encoding="utf-8")
+
+
+def apply_cloud_saves(output: Path) -> None:
+    bundle_files = list((output / "assets").glob("index-*.js"))
+    if len(bundle_files) != 1:
+        raise RuntimeError("Could not identify the qSpider player bundle for cloud saves.")
+    bundle = bundle_files[0]
+    source = bundle.read_text(encoding="utf-8")
+    marker = "let instance$1=null;function getStorage()"
+    player_patch = CLOUD_SAVE_PLAYER_JS.replace("__API_URL__", json.dumps(CLOUD_SAVE_API_URL))
+    if "girllifeCloudToken" in source:
+        start = source.find("let girllifeCloudToken = null;")
+        end = source.find(marker, start)
+        if start < 0 or end < start:
+            raise RuntimeError("Could not update the existing qSpider cloud-save hook.")
+        if start >= len("/* GirlLife cloud saves v2 */\n") and source[start - len("/* GirlLife cloud saves v2 */\n"):start] == "/* GirlLife cloud saves v2 */\n":
+            start -= len("/* GirlLife cloud saves v2 */\n")
+        source = source[:start] + player_patch + source[end:]
+    else:
+        if source.count(marker) != 1:
+            raise RuntimeError("qSpider storage hook changed; cloud saves were not installed.")
+        source = source.replace(marker, player_patch + marker, 1)
+    command_marker = 'case"quit":stopCurrentGame();break;'
+    if 'case"cloud-account":' not in source:
+        if source.count(command_marker) != 1:
+            raise RuntimeError("qSpider command hook changed; cloud account access was not installed.")
+        source = source.replace(
+            command_marker,
+            'case"cloud-account":cloudEnsureSession().then(ok=>ok&&loadSaveList());break;case"quit":stopCurrentGame();break;',
+            1,
+        )
+    bundle.write_text(source, encoding="utf-8")
+
+    index = output / "index.html"
+    markup = index.read_text(encoding="utf-8")
+    original_markup = markup
+    script = '<script src="./cloud-saves-ui.js" defer></script>'
+    if CLOUD_SAVE_CACHE_VERSION not in markup:
+        pattern = r'(<script type="module" crossorigin src="[^"]+?\.js)(?:\?v=[^"]*)?(">)'
+        if len(re.findall(pattern, markup)) != 1:
+            raise RuntimeError("Could not refresh the cached qSpider player bundle URL.")
+        markup = re.sub(pattern, rf'\1?v={CLOUD_SAVE_CACHE_VERSION}\2', markup, count=1)
+    if script not in markup:
+        if markup.count("</head>") != 1:
+            raise RuntimeError("Could not add the cloud account dialog to the player page.")
+        markup = markup.replace("</head>", f"    {script}\n  </head>", 1)
+    if markup != original_markup:
+        index.write_text(markup, encoding="utf-8")
+    ui = output / "cloud-saves-ui.js"
+    if not ui.exists():
+        write_file(ui, CLOUD_SAVE_UI_JS)
+
+    for theme_name in ("aero.html", "classic.html"):
+        theme = output / "themes" / theme_name
+        if not theme.is_file():
+            continue
+        markup = theme.read_text(encoding="utf-8")
+        marker = '<qsp-pause-screen-panel name="saves">'
+        button = '<button qsp-command="cloud-account" class="qsp-button">Cloud account / Sign in</button>'
+        if button not in markup:
+            if markup.count(marker) != 1:
+                raise RuntimeError(f"Could not add cloud account access to {theme_name}.")
+            markup = markup.replace(marker, marker + "\n              " + button, 1)
+            theme.write_text(markup, encoding="utf-8")
 
 
 def link_or_copy_tree(source: Path, destination: Path) -> None:
@@ -444,6 +880,7 @@ def main() -> int:
         if not (output / "index.html").is_file() or not (output / "game" / game.name).is_file():
             raise RuntimeError(f"既有輸出資料夾不完整，為避免覆蓋已停止：{output.name}")
         print(f"找到既有產物，不覆蓋：{output}")
+        apply_cloud_saves(output)
         missing_by_kind, missing_references = audit_missing_media(
             game, output / "game" / "images", output / "game" / "sound"
         )
@@ -470,6 +907,8 @@ def main() -> int:
         output.mkdir()
         try:
             unpack_player(player_zip, output)
+            apply_mobile_layout(output)
+            apply_cloud_saves(output)
             game_dir = output / "game"
             game_dir.mkdir(exist_ok=True)
             shutil.copy2(game, game_dir / game.name)

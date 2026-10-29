@@ -28,6 +28,7 @@ GirlLife/
 ├── Build-GirlLife-HTML.ps1
 ├── Build-GirlLife-HTML.sh
 ├── build_girllife_html.py
+├── girllife_server.py       # cloud-save service (hosted by the project owner)
 ├── Girl Life 0.9.9.2.qsp
 ├── images/
 └── sound/                 # optional; audio is absent if not provided
@@ -56,9 +57,15 @@ chmod +x Build-GirlLife-HTML.sh
 
 Double-click `Build-GirlLife-HTML.bat`. It uses the included PowerShell launcher to check, request consent for, and if needed install Python before running the builder. PowerShell is included with supported Windows versions.
 
-The builder creates a sibling folder named `<English game filename>_HTML`, reports missing media, starts a local web server on a dynamically assigned port, prints the local URL, and tries to open it in your browser. Keep the launcher window open while playing. Press `Ctrl+C` in that window to stop the server.
+The builder creates a sibling folder named `<English game filename>_HTML`, reports missing media, starts a local web server on a dynamically assigned port, prints the local URL, and tries to open it in your browser. On narrow phone screens, the Aero layout reflows into readable text, touch sized actions, and media that fits the available space. A side panel menu switches between Items and Stats, with only one open at a time. Tap the blank area around a popup image to close it. Keep the launcher window open while playing. Press `Ctrl+C` in that window to stop the server.
 
 If a valid output folder already exists, it is preserved. The builder audits and serves that existing package rather than overwriting it.
+
+## Cloud saves
+
+The generated player stores numbered slots, named saves, and quick saves on the GirlLife cloud service at `girllife.mewcat.me`. Open the game's **Saves** panel and choose **Cloud account / Sign in**. Create one account, then sign in with that account on other devices to access the same saves. Sign in again after reloading the game page because the session token is held only in browser memory. Account names are 3–32 ASCII letters, numbers, dots, dashes, or underscores. New passwords must be at least 12 characters. An internet connection is required for cloud saves; the game itself can still be served locally.
+
+Passwords are stored as salted scrypt hashes; bearer session tokens are also hashed in the database and held in browser memory. Save contents are stored in the server's SQLite database without application-level encryption. Each save is limited to 4 MB, and each account can store up to 512 saves or 256 MB total. Keep a separate copy of important saves; availability depends on the hosted service.
 
 ## Asset discovery and missing files
 

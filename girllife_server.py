@@ -1,0 +1,308 @@
+#!/usr/bin/env python3
+"""Serve the Girl Life site and authenticated cloud saves."""
+
+from __future__ import annotations
+
+import base64
+from contextlib import contextmanager
+import hashlib
+import hmac
+import json
+import os
+import re
+import secrets
+import sqlite3
+import time
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
+
+
+ROOT = Path(__file__).resolve().parent
+DATABASE = Path(os.environ.get("GIRLLIFE_SAVE_DATABASE", "/var/lib/girl-life-saves/saves.sqlite3"))
+MAX_REQUEST_BYTES = 6 * 1024 * 1024
+MAX_SAVE_BYTES = 4 * 1024 * 1024
+MAX_ACCOUNT_SAVES = 512
+MAX_ACCOUNT_STORAGE_BYTES = 256 * 1024 * 1024
+SESSION_SECONDS = 7 * 24 * 60 * 60
+GAME_ID = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
+USERNAME = re.compile(r"[A-Za-z0-9_.-]{3,32}\Z")
+
+
+@contextmanager
+def database():
+    DATABASE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    connection = sqlite3.connect(DATABASE, timeout=10)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA busy_timeout = 10000")
+    connection.execute("PRAGMA journal_mode = WAL")
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY,
+            username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            salt BLOB NOT NULL,
+            password_hash BLOB NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sessions (
+            token_hash BLOB PRIMARY KEY,
+            account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            expires_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS saves (
+            account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            game_id TEXT NOT NULL,
+            slot INTEGER NOT NULL,
+            save_key TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            data BLOB NOT NULL,
+            PRIMARY KEY (account_id, game_id, slot, save_key)
+        );
+        """
+    )
+    connection.execute("PRAGMA foreign_keys = ON")
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def password_hash(password: str, salt: bytes) -> bytes:
+    return hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1, dklen=32)
+
+
+class GirlLifeHandler(SimpleHTTPRequestHandler):
+    server_version = "GirlLife/1.0"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(ROOT), **kwargs)
+
+    def end_headers(self) -> None:
+        origin = self.headers.get("Origin", "")
+        if origin == "https://girllife.mewcat.me" or re.fullmatch(
+            r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?", origin
+        ):
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        super().end_headers()
+
+    def do_OPTIONS(self) -> None:
+        if urlsplit(self.path).path.startswith("/api/"):
+            self.send_response(204)
+            self.end_headers()
+        else:
+            self.send_error(404)
+
+    def do_GET(self) -> None:
+        if urlsplit(self.path).path.startswith("/api/"):
+            self.handle_api("GET")
+        else:
+            super().do_GET()
+
+    def do_POST(self) -> None:
+        self.handle_api("POST")
+
+    def do_PUT(self) -> None:
+        self.handle_api("PUT")
+
+    def do_DELETE(self) -> None:
+        self.handle_api("DELETE")
+
+    def handle_api(self, method: str) -> None:
+        route = urlsplit(self.path)
+        if route.path not in {"/api/accounts", "/api/sessions", "/api/saves"}:
+            self.send_json(404, {"error": "Not found"})
+            return
+        try:
+            if route.path == "/api/accounts" and method == "POST":
+                self.create_account()
+            elif route.path == "/api/sessions" and method == "POST":
+                self.create_session()
+            elif route.path == "/api/saves":
+                self.handle_saves(method, parse_qs(route.query))
+            else:
+                self.send_json(405, {"error": "Method not allowed"})
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            self.send_json(400, {"error": str(error) or "Invalid request"})
+        except sqlite3.Error:
+            self.send_json(503, {"error": "Save storage is temporarily unavailable"})
+
+    def read_json(self) -> dict:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as error:
+            raise ValueError("Invalid content length") from error
+        if length < 1 or length > MAX_REQUEST_BYTES:
+            raise ValueError("Request is empty or too large")
+        value = json.loads(self.rfile.read(length))
+        if not isinstance(value, dict):
+            raise ValueError("Expected a JSON object")
+        return value
+
+    def create_account(self) -> None:
+        value = self.read_json()
+        username = value.get("username", "")
+        password = value.get("password", "")
+        if not isinstance(username, str) or not USERNAME.fullmatch(username):
+            self.send_json(400, {"error": "Account names must be 3-32 letters, numbers, dots, dashes, or underscores"})
+            return
+        if not isinstance(password, str) or len(password) < 12 or len(password) > 1024:
+            self.send_json(400, {"error": "Password must contain at least 12 characters"})
+            return
+        salt = secrets.token_bytes(16)
+        with database() as connection:
+            try:
+                cursor = connection.execute(
+                    "INSERT INTO accounts(username, salt, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                    (username.lower(), salt, password_hash(password, salt), int(time.time())),
+                )
+            except sqlite3.IntegrityError:
+                self.send_json(409, {"error": "Account already exists; sign in instead"})
+                return
+            self.issue_session(connection, cursor.lastrowid, username)
+
+    def create_session(self) -> None:
+        value = self.read_json()
+        username = value.get("username", "")
+        password = value.get("password", "")
+        if not isinstance(username, str) or not isinstance(password, str):
+            self.send_json(401, {"error": "Invalid account or password"})
+            return
+        with database() as connection:
+            account = connection.execute(
+                "SELECT id, username, salt, password_hash FROM accounts WHERE username = ? COLLATE NOCASE",
+                (username.lower(),),
+            ).fetchone()
+            if account is None or not hmac.compare_digest(
+                password_hash(password, account["salt"]), account["password_hash"]
+            ):
+                self.send_json(401, {"error": "Invalid account or password"})
+                return
+            self.issue_session(connection, account["id"], account["username"])
+
+    def issue_session(self, connection: sqlite3.Connection, account_id: int, username: str) -> None:
+        token = secrets.token_urlsafe(32)
+        connection.execute("DELETE FROM sessions WHERE expires_at < ?", (int(time.time()),))
+        connection.execute(
+            "INSERT INTO sessions(token_hash, account_id, expires_at) VALUES (?, ?, ?)",
+            (hashlib.sha256(token.encode()).digest(), account_id, int(time.time()) + SESSION_SECONDS),
+        )
+        connection.commit()
+        self.send_json(201, {"token": token, "username": username})
+
+    def authenticated_account(self) -> int | None:
+        scheme, _, token = self.headers.get("Authorization", "").partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            return None
+        with database() as connection:
+            row = connection.execute(
+                "SELECT account_id FROM sessions WHERE token_hash = ? AND expires_at >= ?",
+                (hashlib.sha256(token.encode()).digest(), int(time.time())),
+            ).fetchone()
+        return row["account_id"] if row else None
+
+    def handle_saves(self, method: str, query: dict[str, list[str]]) -> None:
+        account_id = self.authenticated_account()
+        if account_id is None:
+            self.send_json(401, {"error": "Sign in to access cloud saves"})
+            return
+        game_id = query.get("game_id", [""])[0]
+        if not GAME_ID.fullmatch(game_id):
+            self.send_json(400, {"error": "Invalid game ID"})
+            return
+        slot_text = query.get("slot", [""])[0]
+        save_key = query.get("key", [""])[0]
+        if bool(slot_text) == bool(save_key):
+            if method != "GET" or slot_text or save_key:
+                self.send_json(400, {"error": "Choose either a slot or a save key"})
+                return
+            with database() as connection:
+                rows = connection.execute(
+                    "SELECT slot, save_key, timestamp FROM saves WHERE account_id = ? AND game_id = ? ORDER BY timestamp DESC",
+                    (account_id, game_id),
+                ).fetchall()
+            self.send_json(200, [{"slot": row["slot"], "key": row["save_key"], "timestamp": row["timestamp"]} for row in rows])
+            return
+        try:
+            slot = int(slot_text) if slot_text else -1
+        except ValueError:
+            self.send_json(400, {"error": "Invalid save slot"})
+            return
+        if slot_text and not 1 <= slot <= 99:
+            self.send_json(400, {"error": "Invalid save slot"})
+            return
+        if save_key and (len(save_key) > 255 or slot_text):
+            self.send_json(400, {"error": "Invalid save key"})
+            return
+        if method == "GET":
+            with database() as connection:
+                row = connection.execute(
+                    "SELECT data, timestamp FROM saves WHERE account_id = ? AND game_id = ? AND slot = ? AND save_key = ?",
+                    (account_id, game_id, slot, save_key),
+                ).fetchone()
+            if row is None:
+                self.send_json(404, {"error": "Save not found"})
+            else:
+                self.send_json(200, {"data": base64.b64encode(row["data"]).decode("ascii"), "timestamp": row["timestamp"]})
+        elif method == "PUT":
+            value = self.read_json()
+            encoded = value.get("data", "")
+            if not isinstance(encoded, str):
+                raise ValueError("Invalid save data")
+            data = base64.b64decode(encoded, validate=True)
+            if not data or len(data) > MAX_SAVE_BYTES:
+                self.send_json(413, {"error": "Save is empty or exceeds the 4 MB limit"})
+                return
+            timestamp = int(time.time() * 1000)
+            with database() as connection:
+                existing = connection.execute(
+                    "SELECT length(data) AS bytes FROM saves WHERE account_id = ? AND game_id = ? AND slot = ? AND save_key = ?",
+                    (account_id, game_id, slot, save_key),
+                ).fetchone()
+                usage = connection.execute(
+                    "SELECT COUNT(*) AS saves, COALESCE(SUM(length(data)), 0) AS bytes FROM saves WHERE account_id = ?",
+                    (account_id,),
+                ).fetchone()
+                new_count = usage["saves"] + (existing is None)
+                new_size = usage["bytes"] - (existing["bytes"] if existing else 0) + len(data)
+                if new_count > MAX_ACCOUNT_SAVES or new_size > MAX_ACCOUNT_STORAGE_BYTES:
+                    self.send_json(413, {"error": "This account has reached its cloud save storage limit"})
+                    return
+                connection.execute(
+                    "INSERT INTO saves(account_id, game_id, slot, save_key, timestamp, data) VALUES (?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(account_id, game_id, slot, save_key) DO UPDATE SET timestamp=excluded.timestamp, data=excluded.data",
+                    (account_id, game_id, slot, save_key, timestamp, data),
+                )
+            self.send_json(200, {"timestamp": timestamp})
+        elif method == "DELETE":
+            with database() as connection:
+                connection.execute(
+                    "DELETE FROM saves WHERE account_id = ? AND game_id = ? AND slot = ? AND save_key = ?",
+                    (account_id, game_id, slot, save_key),
+                )
+            self.send_json(204, None)
+        else:
+            self.send_json(405, {"error": "Method not allowed"})
+
+    def send_json(self, status: int, value) -> None:
+        body = b"" if value is None else json.dumps(value, separators=(",", ":")).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if body:
+            self.wfile.write(body)
+
+
+if __name__ == "__main__":
+    os.umask(0o077)
+    with ThreadingHTTPServer(("127.0.0.1", 8081), GirlLifeHandler) as server:
+        server.serve_forever()
