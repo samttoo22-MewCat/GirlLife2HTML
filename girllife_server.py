@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Serve the Girl Life site and authenticated cloud saves."""
+"""Serve the Girl Life site and authenticated cloud saves.
+
+Tuned for many concurrent players: HTTP/1.1 keep-alive, one reused SQLite
+connection per server thread, schema created once at start-up, constant-time
+per-account usage accounting, and a hard cap on worker threads.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +17,8 @@ import os
 import re
 import secrets
 import sqlite3
+import sys
+import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,51 +33,107 @@ MAX_SAVE_BYTES = 4 * 1024 * 1024
 MAX_ACCOUNT_SAVES = 512
 MAX_ACCOUNT_STORAGE_BYTES = 256 * 1024 * 1024
 SESSION_SECONDS = 7 * 24 * 60 * 60
+MAX_CONCURRENT_REQUESTS = int(os.environ.get("GIRLLIFE_MAX_CONCURRENT_REQUESTS", "96"))
+REQUEST_TIMEOUT_SECONDS = int(os.environ.get("GIRLLIFE_REQUEST_TIMEOUT", "65"))
+LISTEN_PORT = int(os.environ.get("GIRLLIFE_PORT", "8081"))
 GAME_ID = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
 USERNAME = re.compile(r"[A-Za-z0-9_.-]{3,32}\Z")
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS accounts (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    salt BLOB NOT NULL,
+    password_hash BLOB NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash BLOB PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
+CREATE TABLE IF NOT EXISTS saves (
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    game_id TEXT NOT NULL,
+    slot INTEGER NOT NULL,
+    save_key TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    PRIMARY KEY (account_id, game_id, slot, save_key)
+);
+CREATE INDEX IF NOT EXISTS saves_by_time ON saves(account_id, game_id, timestamp DESC);
+CREATE TABLE IF NOT EXISTS account_usage (
+    account_id INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    saves INTEGER NOT NULL DEFAULT 0,
+    bytes INTEGER NOT NULL DEFAULT 0
+);
+CREATE TRIGGER IF NOT EXISTS saves_usage_insert AFTER INSERT ON saves BEGIN
+    INSERT INTO account_usage(account_id, saves, bytes) VALUES (NEW.account_id, 1, length(NEW.data))
+    ON CONFLICT(account_id) DO UPDATE SET saves = saves + 1, bytes = bytes + length(NEW.data);
+END;
+CREATE TRIGGER IF NOT EXISTS saves_usage_update AFTER UPDATE OF data ON saves BEGIN
+    UPDATE account_usage SET bytes = bytes + length(NEW.data) - length(OLD.data)
+    WHERE account_id = OLD.account_id;
+END;
+CREATE TRIGGER IF NOT EXISTS saves_usage_delete AFTER DELETE ON saves BEGIN
+    UPDATE account_usage SET saves = max(saves - 1, 0), bytes = max(bytes - length(OLD.data), 0)
+    WHERE account_id = OLD.account_id;
+END;
+"""
+
+_schema_lock = threading.Lock()
+_schema_ready = False
+_thread_state = threading.local()
+
+
+def initialize_database() -> None:
+    """Create the schema once per process instead of on every request."""
+    global _schema_ready
+    with _schema_lock:
+        if _schema_ready:
+            return
+        DATABASE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        connection = sqlite3.connect(DATABASE, timeout=10)
+        try:
+            connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("PRAGMA synchronous = NORMAL")
+            connection.executescript(SCHEMA)
+            connection.execute(
+                "INSERT INTO account_usage(account_id, saves, bytes) "
+                "SELECT account_id, count(*), coalesce(sum(length(data)), 0) FROM saves "
+                "WHERE account_id NOT IN (SELECT account_id FROM account_usage) GROUP BY account_id"
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        _schema_ready = True
+
+
+def thread_connection() -> sqlite3.Connection:
+    """Reuse one SQLite connection per worker thread (WAL allows parallel readers)."""
+    connection = getattr(_thread_state, "connection", None)
+    if connection is None:
+        connection = sqlite3.connect(DATABASE, timeout=10)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA busy_timeout = 10000")
+        connection.execute("PRAGMA synchronous = NORMAL")
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("PRAGMA cache_size = -16384")
+        _thread_state.connection = connection
+    return connection
 
 
 @contextmanager
 def database():
-    DATABASE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    connection = sqlite3.connect(DATABASE, timeout=10)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA busy_timeout = 10000")
-    connection.execute("PRAGMA journal_mode = WAL")
-    connection.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS accounts (
-            id INTEGER PRIMARY KEY,
-            username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-            salt BLOB NOT NULL,
-            password_hash BLOB NOT NULL,
-            created_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS sessions (
-            token_hash BLOB PRIMARY KEY,
-            account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-            expires_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS saves (
-            account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-            game_id TEXT NOT NULL,
-            slot INTEGER NOT NULL,
-            save_key TEXT NOT NULL,
-            timestamp INTEGER NOT NULL,
-            data BLOB NOT NULL,
-            PRIMARY KEY (account_id, game_id, slot, save_key)
-        );
-        """
-    )
-    connection.execute("PRAGMA foreign_keys = ON")
+    initialize_database()
+    connection = thread_connection()
     try:
         yield connection
         connection.commit()
-    except Exception:
+    except BaseException:
         connection.rollback()
         raise
-    finally:
-        connection.close()
 
 
 def password_hash(password: str, salt: bytes) -> bytes:
@@ -78,12 +141,20 @@ def password_hash(password: str, salt: bytes) -> bytes:
 
 
 class GirlLifeHandler(SimpleHTTPRequestHandler):
-    server_version = "GirlLife/1.0"
+    server_version = "GirlLife/1.1"
+    protocol_version = "HTTP/1.1"
+    timeout = REQUEST_TIMEOUT_SECONDS
 
     def __init__(self, *args, **kwargs):
+        self._body_consumed = False
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def end_headers(self) -> None:
+        if self.close_connection and not getattr(self, "_close_header_sent", False):
+            # The stdlib never writes this header itself; without it a keep-alive
+            # client would try to reuse a socket we are about to close.
+            self._close_header_sent = True
+            self.send_header("Connection", "close")
         if getattr(self, "_serve_qsp_gzip", False):
             self.send_header("Content-Encoding", "gzip")
             original_size = getattr(self, "_original_qsp_size", None)
@@ -121,10 +192,16 @@ class GirlLifeHandler(SimpleHTTPRequestHandler):
             return "application/octet-stream"
         return super().guess_type(path)
 
+    def log_message(self, format: str, *args) -> None:
+        # Static asset hits are the bulk of the traffic; keep the journal for the API and failures.
+        code = str(args[1]) if len(args) > 1 else ""
+        if urlsplit(self.path).path.startswith("/api/") or not code.startswith("2"):
+            super().log_message(format, *args)
 
     def do_OPTIONS(self) -> None:
         if urlsplit(self.path).path.startswith("/api/"):
             self.send_response(204)
+            self._close_if_body_unread()
             self.end_headers()
         else:
             self.send_error(404)
@@ -171,6 +248,7 @@ class GirlLifeHandler(SimpleHTTPRequestHandler):
         if length < 1 or length > MAX_REQUEST_BYTES:
             raise ValueError("Request is empty or too large")
         value = json.loads(self.rfile.read(length))
+        self._body_consumed = True
         if not isinstance(value, dict):
             raise ValueError("Expected a JSON object")
         return value
@@ -294,17 +372,23 @@ class GirlLifeHandler(SimpleHTTPRequestHandler):
                 return
             timestamp = int(time.time() * 1000)
             with database() as connection:
-                existing = connection.execute(
-                    "SELECT length(data) AS bytes FROM saves WHERE account_id = ? AND game_id = ? AND slot = ? AND save_key = ?",
-                    (account_id, game_id, slot, save_key),
-                ).fetchone()
                 usage = connection.execute(
-                    "SELECT COUNT(*) AS saves, COALESCE(SUM(length(data)), 0) AS bytes FROM saves WHERE account_id = ?",
-                    (account_id,),
+                    "SELECT saves, bytes FROM account_usage WHERE account_id = ?", (account_id,)
                 ).fetchone()
-                new_count = usage["saves"] + (existing is None)
-                new_size = usage["bytes"] - (existing["bytes"] if existing else 0) + len(data)
-                if new_count > MAX_ACCOUNT_SAVES or new_size > MAX_ACCOUNT_STORAGE_BYTES:
+                used_saves = usage["saves"] if usage else 0
+                used_bytes = usage["bytes"] if usage else 0
+                replaced = None
+                if used_saves >= MAX_ACCOUNT_SAVES or used_bytes + len(data) > MAX_ACCOUNT_STORAGE_BYTES:
+                    # Only near a limit do we need the stored size of the row being overwritten.
+                    replaced = connection.execute(
+                        "SELECT length(data) AS bytes FROM saves WHERE account_id = ? AND game_id = ? AND slot = ? AND save_key = ?",
+                        (account_id, game_id, slot, save_key),
+                    ).fetchone()
+                if used_saves >= MAX_ACCOUNT_SAVES and replaced is None:
+                    self.send_json(413, {"error": "This account has reached its cloud save storage limit"})
+                    return
+                replaced_bytes = replaced["bytes"] if replaced else 0
+                if used_bytes - replaced_bytes + len(data) > MAX_ACCOUNT_STORAGE_BYTES:
                     self.send_json(413, {"error": "This account has reached its cloud save storage limit"})
                     return
                 connection.execute(
@@ -323,15 +407,78 @@ class GirlLifeHandler(SimpleHTTPRequestHandler):
         else:
             self.send_json(405, {"error": "Method not allowed"})
 
+    def _close_if_body_unread(self) -> None:
+        """HTTP/1.1 keep-alive cannot survive an unread request body."""
+        if self._body_consumed:
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length > 0:
+            self.close_connection = True
+
     def send_json(self, status: int, value) -> None:
         body = b"" if value is None else json.dumps(value, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
+        if status != 204:
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        if body:
-            self.wfile.write(body)
+        self._close_if_body_unread()
+        try:
+            self.end_headers()
+            if body:
+                self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+
+
+class GirlLifeServer(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+    request_queue_size = 256
+
+    def __init__(self, *args, **kwargs):
+        self._request_slots = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address) -> None:
+        if not self._request_slots.acquire(blocking=False):
+            self._reject_busy(request)
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._request_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_slots.release()
+
+    @staticmethod
+    def _reject_busy(request) -> None:
+        body = b'{"error":"Server is busy; please try again"}'
+        try:
+            request.sendall(
+                b"HTTP/1.1 503 Service Unavailable\r\n"
+                b"Retry-After: 5\r\n"
+                b"Content-Type: application/json; charset=utf-8\r\n"
+                b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n"
+                b"Connection: close\r\n\r\n" + body
+            )
+        except OSError:
+            pass
+
+    def handle_error(self, request, client_address) -> None:
+        error = sys.exc_info()[1]
+        if isinstance(error, (BrokenPipeError, ConnectionResetError, TimeoutError)):
+            return
+        super().handle_error(request, client_address)
 
 
 def accepts_gzip(header: str) -> bool:
@@ -349,5 +496,6 @@ def accepts_gzip(header: str) -> bool:
 
 if __name__ == "__main__":
     os.umask(0o077)
-    with ThreadingHTTPServer(("127.0.0.1", 8081), GirlLifeHandler) as server:
+    initialize_database()
+    with GirlLifeServer(("127.0.0.1", LISTEN_PORT), GirlLifeHandler) as server:
         server.serve_forever()

@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-10"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-11"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -175,8 +175,8 @@ CLOUD_SAVE_UI_JS = r'''(() => {
   dialog.className = "cloud-account-dialog";
   dialog.innerHTML = `
     <form novalidate>
-      <h2>Cloud save account</h2>
-      <p class="cloud-account-intro">Cloud saves belong to an account. Sign in, or create one with a single password.</p>
+      <h2 data-role="title">Cloud save account</h2>
+      <p class="cloud-account-intro" data-role="intro">Cloud saves belong to an account. Sign in, or create one with a single password.</p>
       <div class="cloud-account-fields">
         <label>Account name<input name="username" autocomplete="username" spellcheck="false" maxlength="32" required></label>
         <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
@@ -192,6 +192,9 @@ CLOUD_SAVE_UI_JS = r'''(() => {
   const style = document.createElement("style");
   style.textContent = `
     .cloud-account-dialog { width:min(92vw, 420px); border:0; border-radius:12px; padding:22px; color:#171717; background:#fff; }
+    /* qSpider sets body{pointer-events:none} while the pause screen is open;
+       the dialog lives in body, so it must opt back in to stay usable. */
+    .cloud-account-dialog, .cloud-account-dialog * { pointer-events:auto; }
     .cloud-account-dialog::backdrop { background:rgb(0 0 0 / 65%); }
     .cloud-account-dialog h2 { margin:0 0 10px; font:600 1.3rem/1.3 system-ui,sans-serif; }
     .cloud-account-dialog .cloud-account-intro { margin:0 0 4px; color:#444; font:14px/1.45 system-ui,sans-serif; }
@@ -203,12 +206,15 @@ CLOUD_SAVE_UI_JS = r'''(() => {
     .cloud-account-actions { display:flex; flex-wrap:wrap; gap:8px; }
     .cloud-account-actions button { min-height:44px; padding:8px 12px; font:600 15px system-ui,sans-serif; }
     .cloud-account-actions button[hidden] { display:none; }
+    .cloud-account-dialog[data-intent="register"] .cloud-account-actions button[value="create"] { order:-1; background:#146; color:#fff; border:1px solid #146; }
   `;
   document.head.append(style);
   document.body.append(dialog);
   const form = dialog.querySelector("form");
   const fields = dialog.querySelector(".cloud-account-fields");
   const status = dialog.querySelector(".cloud-account-status");
+  const title = dialog.querySelector("[data-role='title']");
+  const intro = dialog.querySelector("[data-role='intro']");
   const usernameInput = form.elements.username;
   const passwordInput = form.elements.password;
   const loginButton = dialog.querySelector('button[value="login"]');
@@ -218,6 +224,17 @@ CLOUD_SAVE_UI_JS = r'''(() => {
   let finish = null;
   let request = null;
   let busy = false;
+
+  function setIntent(intent) {
+    const register = intent === "register";
+    dialog.dataset.intent = register ? "register" : "signin";
+    title.textContent = register ? "Create a cloud account" : "Cloud save account";
+    intro.textContent = register
+      ? "Loading and saving needs a cloud account. Choose a name and a password to create one; there is no email and no minimum password length. Already have an account? Use Sign in."
+      : "Cloud saves belong to an account. Sign in, or create one with a single password.";
+    createButton.textContent = "Create account";
+    loginButton.textContent = "Sign in";
+  }
 
   function setBusy(value) {
     busy = value;
@@ -273,6 +290,7 @@ CLOUD_SAVE_UI_JS = r'''(() => {
       return;
     }
     setBusy(false);
+    if (outcome && outcome.conflict && dialog.dataset.intent === "register") setIntent("signin");
     status.textContent = (outcome && outcome.error) || "Cloud account request failed.";
     passwordInput.focus();
     passwordInput.select();
@@ -300,6 +318,7 @@ CLOUD_SAVE_UI_JS = r'''(() => {
       createButton.hidden = false;
       signOutButton.hidden = true;
       closeButton.textContent = "Cancel";
+      setIntent(options && options.register ? "register" : "signin");
       usernameInput.value = options && options.username ? String(options.username) : "";
       passwordInput.value = "";
       status.textContent = (options && options.message) || "";
@@ -332,12 +351,14 @@ CLOUD_SAVE_UI_JS = r'''(() => {
 })();
 '''
 
-CLOUD_SAVE_PLAYER_JS = r'''/* GirlLife cloud saves v3 */
+CLOUD_SAVE_PLAYER_JS = r'''/* GirlLife cloud saves v4 */
 let girllifeCloudToken = null;
 let girllifeCloudUser = "";
 const girllifeCloudSessionKey = "girllife.cloud.session";
 // A token restored from storage stays untested until the service confirms it.
 let girllifeCloudRestored = false;
+// True once this device has ever held an account, so a fresh visitor is pushed to register.
+let girllifeCloudKnownAccount = false;
 function girllifeCloudSignedIn() { return Boolean(girllifeCloudToken); }
 function girllifeCloudWriteSession() {
   try {
@@ -360,6 +381,7 @@ function girllifeCloudRemember(token, username) {
   girllifeCloudToken = token;
   girllifeCloudUser = username || "";
   girllifeCloudRestored = false;
+  girllifeCloudKnownAccount = true;
   girllifeCloudWriteSession();
 }
 (function girllifeCloudRestore() {
@@ -378,6 +400,7 @@ function girllifeCloudRemember(token, username) {
   girllifeCloudToken = saved.token;
   girllifeCloudUser = typeof saved.username === "string" ? saved.username : "";
   girllifeCloudRestored = true;
+  girllifeCloudKnownAccount = true;
 })();
 async function girllifeCloudVerify() {
   try {
@@ -402,14 +425,17 @@ async function girllifeCloudAuthenticate(credentials) {
     });
   } catch (_) { return {ok: false, error: "The cloud save service could not be reached."}; }
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) return {ok: false, error: result.error || "Cloud account request failed."};
+  if (!response.ok) return {ok: false, error: result.error || "Cloud account request failed.", conflict: response.status === 409};
   girllifeCloudRemember(result.token, result.username || credentials.username);
   return {ok: true};
 }
 async function cloudEnsureSession() {
   if (girllifeCloudSignedIn() && !girllifeCloudRestored) return true;
   if (girllifeCloudSignedIn() && (await girllifeCloudVerify())) return true;
-  const credentials = await window.girllifeCloudCredentials?.({submit: girllifeCloudAuthenticate});
+  const credentials = await window.girllifeCloudCredentials?.({
+    submit: girllifeCloudAuthenticate,
+    register: !girllifeCloudKnownAccount
+  });
   return Boolean(credentials);
 }
 async function girllifeCloudAccount() {
