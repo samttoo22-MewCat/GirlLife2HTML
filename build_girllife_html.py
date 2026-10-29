@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-9"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-10"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -185,6 +185,7 @@ CLOUD_SAVE_UI_JS = r'''(() => {
       <div class="cloud-account-actions">
         <button type="submit" value="login">Sign in</button>
         <button type="submit" value="create">Create account</button>
+        <button type="button" data-role="signout" hidden>Sign out</button>
         <button type="button" data-role="close">Cancel</button>
       </div>
     </form>`;
@@ -213,6 +214,7 @@ CLOUD_SAVE_UI_JS = r'''(() => {
   const loginButton = dialog.querySelector('button[value="login"]');
   const createButton = dialog.querySelector('button[value="create"]');
   const closeButton = dialog.querySelector("button[data-role='close']");
+  const signOutButton = dialog.querySelector("button[data-role='signout']");
   let finish = null;
   let request = null;
   let busy = false;
@@ -281,6 +283,10 @@ CLOUD_SAVE_UI_JS = r'''(() => {
     attempt(event.submitter && event.submitter.value === "create" ? "create" : "login");
   });
   closeButton.addEventListener("click", () => settle(null));
+  signOutButton.addEventListener("click", () => {
+    window.girllifeCloudSignOut?.();
+    settle({signedOut: true});
+  });
   dialog.addEventListener("close", () => {
     if (finish) settle(null);
   });
@@ -292,6 +298,7 @@ CLOUD_SAVE_UI_JS = r'''(() => {
       dialog.dataset.mode = "credentials";
       loginButton.hidden = false;
       createButton.hidden = false;
+      signOutButton.hidden = true;
       closeButton.textContent = "Cancel";
       usernameInput.value = options && options.username ? String(options.username) : "";
       passwordInput.value = "";
@@ -309,10 +316,11 @@ CLOUD_SAVE_UI_JS = r'''(() => {
       dialog.dataset.mode = "status";
       loginButton.hidden = true;
       createButton.hidden = true;
+      signOutButton.hidden = false;
       closeButton.textContent = "Close";
       fields.querySelectorAll("input").forEach(input => { input.value = ""; });
       const name = info && info.username ? info.username : "your account";
-      status.textContent = `Signed in as ${name}. Cloud saves are ready.`;
+      status.textContent = `Signed in as ${name}. Cloud saves are ready; this device stays signed in for 7 days.`;
       setBusy(false);
       if (!dialog.open) dialog.showModal();
       closeButton.focus();
@@ -324,10 +332,66 @@ CLOUD_SAVE_UI_JS = r'''(() => {
 })();
 '''
 
-CLOUD_SAVE_PLAYER_JS = r'''/* GirlLife cloud saves v2 */
+CLOUD_SAVE_PLAYER_JS = r'''/* GirlLife cloud saves v3 */
 let girllifeCloudToken = null;
 let girllifeCloudUser = "";
+const girllifeCloudSessionKey = "girllife.cloud.session";
+// A token restored from storage stays untested until the service confirms it.
+let girllifeCloudRestored = false;
 function girllifeCloudSignedIn() { return Boolean(girllifeCloudToken); }
+function girllifeCloudWriteSession() {
+  try {
+    if (girllifeCloudToken) {
+      window.localStorage.setItem(girllifeCloudSessionKey, JSON.stringify({token: girllifeCloudToken, username: girllifeCloudUser}));
+    } else {
+      window.localStorage.removeItem(girllifeCloudSessionKey);
+    }
+  } catch (_) {
+    // Private browsing and blocked storage must not break cloud saves.
+  }
+}
+function girllifeCloudForget() {
+  girllifeCloudToken = null;
+  girllifeCloudUser = "";
+  girllifeCloudRestored = false;
+  girllifeCloudWriteSession();
+}
+function girllifeCloudRemember(token, username) {
+  girllifeCloudToken = token;
+  girllifeCloudUser = username || "";
+  girllifeCloudRestored = false;
+  girllifeCloudWriteSession();
+}
+(function girllifeCloudRestore() {
+  let saved = null;
+  try {
+    const raw = window.localStorage.getItem(girllifeCloudSessionKey);
+    if (!raw) return;
+    saved = JSON.parse(raw);
+  } catch (_) {
+    return;
+  }
+  if (!saved || typeof saved.token !== "string" || !saved.token) {
+    try { window.localStorage.removeItem(girllifeCloudSessionKey); } catch (_) {}
+    return;
+  }
+  girllifeCloudToken = saved.token;
+  girllifeCloudUser = typeof saved.username === "string" ? saved.username : "";
+  girllifeCloudRestored = true;
+})();
+async function girllifeCloudVerify() {
+  try {
+    const response = await fetch("__API_URL__/saves?game_id=" + encodeURIComponent("girllife-session-check"), {
+      headers: {Authorization: "Bearer " + girllifeCloudToken}
+    });
+    if (response.status === 401) { girllifeCloudForget(); return false; }
+    if (response.ok) { girllifeCloudRestored = false; return true; }
+    return true;
+  } catch (_) {
+    // Offline: keep the remembered session and let the save request report the failure.
+    return true;
+  }
+}
 async function girllifeCloudAuthenticate(credentials) {
   const route = credentials.mode === "create" ? "/accounts" : "/sessions";
   let response;
@@ -339,29 +403,33 @@ async function girllifeCloudAuthenticate(credentials) {
   } catch (_) { return {ok: false, error: "The cloud save service could not be reached."}; }
   const result = await response.json().catch(() => ({}));
   if (!response.ok) return {ok: false, error: result.error || "Cloud account request failed."};
-  girllifeCloudToken = result.token;
-  girllifeCloudUser = result.username || credentials.username;
+  girllifeCloudRemember(result.token, result.username || credentials.username);
   return {ok: true};
 }
 async function cloudEnsureSession() {
-  if (girllifeCloudSignedIn()) return true;
+  if (girllifeCloudSignedIn() && !girllifeCloudRestored) return true;
+  if (girllifeCloudSignedIn() && (await girllifeCloudVerify())) return true;
   const credentials = await window.girllifeCloudCredentials?.({submit: girllifeCloudAuthenticate});
   return Boolean(credentials);
 }
 async function girllifeCloudAccount() {
   if (girllifeCloudSignedIn()) {
-    await window.girllifeCloudAccountStatus?.({username: girllifeCloudUser});
+    const result = await window.girllifeCloudAccountStatus?.({username: girllifeCloudUser});
+    if (result && result.signedOut) {
+      girllifeCloudForget();
+      return false;
+    }
     return true;
   }
   return cloudEnsureSession();
 }
 async function girllifeOpenPausePanel(name) {
-  if (name !== "saves" || girllifeCloudSignedIn()) {
+  if (name !== "saves") {
     isPauseScreenVisible$.value || openPauseScreen();
     pauseScreenCurrentPanel$.set(name);
     return;
   }
-  if (!(await girllifeCloudAccount())) {
+  if (!(await cloudEnsureSession())) {
     closePauseScreen();
     return;
   }
@@ -371,6 +439,7 @@ async function girllifeOpenPausePanel(name) {
 }
 window.girllifeCloudSignedIn = girllifeCloudSignedIn;
 window.girllifeCloudAccount = girllifeCloudAccount;
+window.girllifeCloudSignOut = girllifeCloudForget;
 function cloudBase64(data) {
   const bytes = new Uint8Array(data);
   let binary = "";
@@ -382,7 +451,7 @@ function cloudFromBase64(value) {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes.buffer;
 }
-async function cloudRequest(method, game, identity, data) {
+async function cloudRequest(method, game, identity, data, quiet) {
   const query = new URLSearchParams({game_id: game, ...identity});
   let response;
   try {
@@ -393,8 +462,10 @@ async function cloudRequest(method, game, identity, data) {
   } catch (_) { window.alert("The cloud save service could not be reached."); throw new Error("Cloud save service unavailable"); }
   if (response.status === 404) return null;
   if (response.status === 401) {
-    girllifeCloudToken = null;
-    if (await cloudEnsureSession()) return cloudRequest(method, game, identity, data);
+    girllifeCloudForget();
+    // Background save-list reads must not interrupt play with a sign-in dialog.
+    if (quiet) return null;
+    if (await cloudEnsureSession()) return cloudRequest(method, game, identity, data, quiet);
     return null;
   }
   if (!response.ok) { const result = await response.json().catch(() => ({})); window.alert(result.error || "Cloud save request failed."); throw new Error(result.error || "Cloud save request failed."); }
@@ -409,12 +480,12 @@ WebStorage.prototype.saveByKey = async function(game, key, data) {
 };
 WebStorage.prototype.getSavedSlots = async function(game) {
   if (!girllifeCloudToken) return [];
-  const rows = await cloudRequest("GET", game, {}, null);
+  const rows = await cloudRequest("GET", game, {}, null, true);
   return (rows || []).filter(row => row.slot > 0 && !row.key).map(row => ({game_id: game, slot: row.slot, key: "", timestamp: row.timestamp}));
 };
 WebStorage.prototype.getNamedSaves = async function(game) {
   if (!girllifeCloudToken) return [];
-  const rows = await cloudRequest("GET", game, {}, null);
+  const rows = await cloudRequest("GET", game, {}, null, true);
   return (rows || []).filter(row => row.key).map(row => ({game_id: game, slot: -1, key: row.key, timestamp: row.timestamp}));
 };
 WebStorage.prototype.hasSaveBySlot = async function(game, slot) {
@@ -723,8 +794,9 @@ def apply_cloud_saves(output: Path) -> None:
         end = source.find(marker, start)
         if start < 0 or end < start:
             raise RuntimeError("Could not update the existing qSpider cloud-save hook.")
-        if start >= len("/* GirlLife cloud saves v2 */\n") and source[start - len("/* GirlLife cloud saves v2 */\n"):start] == "/* GirlLife cloud saves v2 */\n":
-            start -= len("/* GirlLife cloud saves v2 */\n")
+        header_start = source.rfind("/* GirlLife cloud saves", 0, start)
+        if header_start >= 0 and source.find("*/", header_start, start) >= 0:
+            start = header_start
         source = source[:start] + player_patch + source[end:]
     else:
         if source.count(marker) != 1:
@@ -737,16 +809,15 @@ def apply_cloud_saves(output: Path) -> None:
             raise RuntimeError("qSpider pause panel hook changed; cloud save gating was not installed.")
         source = source.replace(panel_marker, panel_replacement, 1)
     command_marker = 'case"quit":stopCurrentGame();break;'
-    cloud_command = 'case"cloud-account":girllifeCloudAccount().then(ok=>ok&&loadSaveList());break;'
-    if 'case"cloud-account":' not in source:
-        if source.count(command_marker) != 1:
+    cloud_command = 'case"cloud-account":girllifeCloudAccount().then(ok=>{if(ok)loadSaveList();else closePauseScreen()});break;'
+    if cloud_command not in source:
+        existing = re.search(r'case"cloud-account":[^\n]*?break;', source)
+        if existing is not None:
+            source = source.replace(existing.group(0), cloud_command, 1)
+        elif source.count(command_marker) == 1:
+            source = source.replace(command_marker, cloud_command + command_marker, 1)
+        else:
             raise RuntimeError("qSpider command hook changed; cloud account access was not installed.")
-        source = source.replace(command_marker, cloud_command + command_marker, 1)
-    else:
-        existing = re.search(r'case"cloud-account":[^;]*;break;', source)
-        if existing is None:
-            raise RuntimeError("Could not refresh the existing qSpider cloud account hook.")
-        source = source.replace(existing.group(0), cloud_command, 1)
     bundle.write_text(source, encoding="utf-8")
 
     index = output / "index.html"
@@ -789,7 +860,11 @@ def apply_cloud_saves(output: Path) -> None:
             continue
         markup = theme.read_text(encoding="utf-8")
         marker = '<qsp-pause-screen-panel name="saves">'
-        button = '<button qsp-command="cloud-account" class="qsp-button">Cloud account / Sign in</button>'
+        button = '<button qsp-command="cloud-account" class="qsp-button">Cloud account</button>'
+        legacy_button = '<button qsp-command="cloud-account" class="qsp-button">Cloud account / Sign in</button>'
+        if legacy_button in markup:
+            markup = markup.replace(legacy_button, button, 1)
+            theme.write_text(markup, encoding="utf-8")
         if button not in markup:
             if markup.count(marker) != 1:
                 raise RuntimeError(f"Could not add cloud account access to {theme_name}.")
