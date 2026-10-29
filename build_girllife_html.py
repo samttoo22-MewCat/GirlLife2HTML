@@ -22,7 +22,95 @@ from pathlib import Path, PurePosixPath
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-2"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-4"
+LOAD_PROGRESS_VERSION = "girllife-loading-progress-v2"
+
+LOAD_PROGRESS_STYLE = """
+#girllife-download-progress {
+  position: fixed; z-index: 2147483647; top: max(10px, env(safe-area-inset-top));
+  left: 50%; transform: translateX(-50%); width: min(440px, calc(100vw - 24px));
+  padding: 11px 14px; border-radius: 9px; background: rgb(22 22 28 / 94%);
+  color: white; box-shadow: 0 3px 18px rgb(0 0 0 / 32%);
+  font: 14px/1.4 system-ui, sans-serif; pointer-events: none;
+}
+#girllife-download-progress[hidden] { display: none; }
+#girllife-download-label { display: block; overflow-wrap: anywhere; }
+#girllife-download-meter { display: block; width: 100%; height: 10px; margin-top: 7px; accent-color: #7189ff; }
+"""
+
+LOAD_PROGRESS_MARKUP = r'''<div id="girllife-download-progress" data-version="girllife-loading-progress-v2" role="status" aria-live="polite">
+  <span id="girllife-download-label">Preparing game…</span>
+  <progress id="girllife-download-meter" max="100" value="0"></progress>
+</div>
+<script>
+(() => {
+  const panel = document.getElementById("girllife-download-progress");
+  const label = document.getElementById("girllife-download-label");
+  const meter = document.getElementById("girllife-download-meter");
+  const requests = new Map();
+  let nextId = 0;
+  let hasStartedRequest = false;
+  const gameReady = () => document.title !== "qSpider" || document.querySelector("qsp-main-content");
+  const formatBytes = value => value < 1048576
+    ? `${Math.max(1, Math.round(value / 1024))} KB`
+    : `${(value / 1048576).toFixed(1)} MB`;
+  const render = () => {
+    const active = [...requests.values()];
+    panel.hidden = active.length === 0 && hasStartedRequest && gameReady();
+    if (!active.length) {
+      meter.removeAttribute("value");
+      label.textContent = "Preparing game…";
+      return;
+    }
+    const loaded = active.reduce((sum, item) => sum + item.loaded, 0);
+    const total = active.reduce((sum, item) => sum + item.total, 0);
+    const resource = active.length === 1 ? active[0].name : `${active.length} game resources`;
+    if (active.every(item => item.total > 0)) {
+      const percent = Math.min(100, Math.floor(loaded * 100 / total));
+      meter.max = total;
+      meter.value = loaded;
+      label.textContent = `Downloading ${resource} — ${percent}% (${formatBytes(loaded)} / ${formatBytes(total)})`;
+    } else {
+      meter.removeAttribute("value");
+      label.textContent = `Downloading ${resource} — ${formatBytes(loaded)}`;
+    }
+  };
+  window.girllifeTrackedFetch = async (requestUrl, originalUrl = requestUrl) => {
+    const response = await fetch(requestUrl);
+    let path = "";
+    try { path = new URL(typeof originalUrl === "string" ? originalUrl : originalUrl.url, location.href).pathname; } catch (_) {}
+    if (!response.ok || !response.body || (!/\.qsp$/i.test(path) && !/\/(?:images|sound)\//i.test(path))) return response;
+    const filename = decodeURIComponent(path.split("/").pop() || "game resource");
+    const item = {name: filename, loaded: 0, total: Number(response.headers.get("Content-Length")) || 0};
+    const id = ++nextId;
+    hasStartedRequest = true;
+    requests.set(id, item);
+    render();
+    const reader = response.body.getReader();
+    const stream = new ReadableStream({
+      async pull(controller) {
+        try {
+          const chunk = await reader.read();
+          if (chunk.done) { controller.close(); requests.delete(id); render(); return; }
+          item.loaded += chunk.value.byteLength;
+          render();
+          controller.enqueue(chunk.value);
+        } catch (error) {
+          controller.error(error);
+          requests.delete(id);
+          render();
+        }
+      },
+      cancel(reason) { reader.cancel(reason); requests.delete(id); render(); }
+    });
+    return new Response(stream, {status: response.status, statusText: response.statusText, headers: response.headers});
+  };
+  const readyObserver = new MutationObserver(() => {
+    if (gameReady()) { render(); readyObserver.disconnect(); }
+  });
+  readyObserver.observe(document.documentElement, {subtree: true, childList: true, characterData: true});
+})();
+</script>'''
 
 CLOUD_SAVE_UI_JS = r'''(() => {
   const dialog = document.createElement("dialog");
@@ -503,6 +591,16 @@ def apply_cloud_saves(output: Path) -> None:
         markup = markup.replace("</head>", f"    {script}\n  </head>", 1)
     if markup != original_markup:
         index.write_text(markup, encoding="utf-8")
+
+    readme = output / "README.md"
+    if readme.is_file():
+        contents = readme.read_text(encoding="utf-8")
+        if "## 下載進度" not in contents and "## 素材\n" in contents:
+            progress_note = (
+                "## 下載進度\n\n"
+                "遊戲本體或素材正在下載時，頁面會顯示下載進度；圖片、影片和音效只在遊戲要求時才由瀏覽器下載。\n\n"
+            )
+            readme.write_text(contents.replace("## 素材\n", progress_note + "## 素材\n", 1), encoding="utf-8")
     ui = output / "cloud-saves-ui.js"
     if not ui.exists():
         write_file(ui, CLOUD_SAVE_UI_JS)
@@ -519,6 +617,45 @@ def apply_cloud_saves(output: Path) -> None:
                 raise RuntimeError(f"Could not add cloud account access to {theme_name}.")
             markup = markup.replace(marker, marker + "\n              " + button, 1)
             theme.write_text(markup, encoding="utf-8")
+
+
+def apply_loading_progress(output: Path) -> None:
+    bundle_files = list((output / "assets").glob("index-*.js"))
+    if len(bundle_files) != 1:
+        raise RuntimeError("Could not identify the qSpider player bundle for download progress.")
+    bundle = bundle_files[0]
+    source = bundle.read_text(encoding="utf-8")
+    original = "function fetchProxyFallback($){return fetch($).catch(()=>fetch(PROXY_URL+window.btoa($)))}"
+    replacement = "function fetchProxyFallback($){return window.girllifeTrackedFetch($,$).catch(()=>window.girllifeTrackedFetch(PROXY_URL+window.btoa($),$))}"
+    if "window.girllifeTrackedFetch($,$)" not in source:
+        if source.count(original) != 1:
+            raise RuntimeError("qSpider download hook changed; download progress was not installed.")
+        bundle.write_text(source.replace(original, replacement, 1), encoding="utf-8")
+
+    index = output / "index.html"
+    markup = index.read_text(encoding="utf-8")
+    original_markup = markup
+    style_marker = "/* GirlLife download progress */"
+    if style_marker not in markup:
+        if markup.count("</head>") != 1:
+            raise RuntimeError("Could not add download progress styling to the player page.")
+        markup = markup.replace(
+            "</head>",
+            f"<style>{style_marker}{LOAD_PROGRESS_STYLE}</style>\n  </head>",
+            1,
+        )
+    if LOAD_PROGRESS_VERSION not in markup and 'id="girllife-download-progress"' in markup:
+        start = markup.find('<div id="girllife-download-progress"')
+        end = markup.find("</script>", start)
+        if start < 0 or end < start:
+            raise RuntimeError("Could not update the existing download progress bar.")
+        markup = markup[:start] + LOAD_PROGRESS_MARKUP + markup[end + len("</script>"):]
+    elif 'id="girllife-download-progress"' not in markup:
+        if markup.count("<body>") != 1:
+            raise RuntimeError("Could not add the download progress bar to the player page.")
+        markup = markup.replace("<body>", "<body>\n    " + LOAD_PROGRESS_MARKUP, 1)
+    if markup != original_markup:
+        index.write_text(markup, encoding="utf-8")
 
 
 def link_or_copy_tree(source: Path, destination: Path) -> None:
@@ -881,6 +1018,7 @@ def main() -> int:
             raise RuntimeError(f"既有輸出資料夾不完整，為避免覆蓋已停止：{output.name}")
         print(f"找到既有產物，不覆蓋：{output}")
         apply_cloud_saves(output)
+        apply_loading_progress(output)
         missing_by_kind, missing_references = audit_missing_media(
             game, output / "game" / "images", output / "game" / "sound"
         )
@@ -909,6 +1047,7 @@ def main() -> int:
             unpack_player(player_zip, output)
             apply_mobile_layout(output)
             apply_cloud_saves(output)
+            apply_loading_progress(output)
             game_dir = output / "game"
             game_dir.mkdir(exist_ok=True)
             shutil.copy2(game, game_dir / game.name)
@@ -989,7 +1128,11 @@ if errorlevel 1 pause
 {image_source_note}
 {patch_note}
 {sound_note}
-圖片與音效在同一磁碟時會以檔案硬連結加入輸出，無法硬連結時改為複製。qSpider 只讀取這些素材。
+圖片與音效在同一磁碟時會以檔案硬連結加入輸出，無法硬連結時改為複製。qSpider 只會在遊戲要求圖片、影片或音效時下載該項素材，不會預先下載整個素材庫。
+
+## 下載進度
+
+遊戲本體或素材正在下載時，頁面會顯示下載進度；網頁初次啟動仍需完整載入 QSP 遊戲本體。
 
 ## 播放器授權
 
