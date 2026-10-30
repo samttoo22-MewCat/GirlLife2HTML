@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-18"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-19"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -959,7 +959,7 @@ MOBILE_COMMON_CSS = """
     padding-top: calc(56px + env(safe-area-inset-top));
   }
   qsp-cl-layer:has(> qsp-cl-dock[data-place="bottom"] qsp-cl-pane > qsp-actions) {
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr) !important;
   }
   qsp-cl qsp-main,
   qsp-cl qsp-actions,
@@ -1062,7 +1062,7 @@ MOBILE_COMMON_CSS = """
     top: 0;
     left: 8px;
     right: 8px;
-    bottom: 50dvh;
+    bottom: 40dvh;
     width: auto !important;
     height: auto !important;
     box-sizing: border-box;
@@ -1084,7 +1084,7 @@ MOBILE_COMMON_CSS = """
     z-index: 1200;
     left: 8px;
     right: 8px;
-    top: 50dvh;
+    top: 60dvh;
     bottom: 0;
     width: auto !important;
     height: auto !important;
