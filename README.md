@@ -61,9 +61,14 @@ The builder creates a sibling folder named `<English game filename>_HTML`, repor
 
 ### Current mobile validation status (2026-10-30)
 
-The Classic split layout and Stats toggle were tested in the browser at 320×568, 390×844, 430×932, and 768×1024. The Items panel's layout was checked with a test DOM fixture because the tested game-start state did not contain Items; populated in-game Items content is not yet verified. The cloud-16 layout is deployed at `https://girllife.mewcat.me/` and the builder/docs are on GitHub `main` (commit `43e16d4`). Physical iPhone/Safari and Windows builds remain untested.
+**Live version: cloud-21**, deployed at `https://girllife.mewcat.me/`. The builder and bilingual documentation are pushed to GitHub `main`; the layout fix is commit `0ac3645`. The service was restarted and is active, the homepage returns HTTP 200, and all four deployed frontend files match their local SHA-256 hashes.
 
 The cloud-21 fix collapses Classic’s reserved 215px right grid track when the inventory mounts during gameplay. Hiding only the inventory pane left this track empty and squeezed the main window to the left; the main/actions now use full viewport width, while Items still opens as an overlay. Local checks reached the cottage and guest room with the real inventory mounted at 320×568, 390×844 and 430×932, with no page overflow. The 70/30 vertical split is unchanged. Physical-phone and Windows execution remain unverified.
+
+- Public-site validation reached the grandparents' cottage with inventory mounted: at a 390px viewport, the main pane measures the full 390px and the right grid track is 0px. Local Items overlay opening/closing was also checked.
+- Earlier prologue-only checks missed the inventory-triggered grid change; changing the vertical split did not fix the reported blank area on the right.
+- These checks do not verify the exact Pavlovsk bedroom shown in the user's screenshot, every inventory interaction, or all gameplay paths. Physical Android/iPhone/Safari and Windows execution remain unverified.
+- This update changed only frontend layout files; the original QSP/media and production accounts, saves, and database content were not modified.
 
 If a valid output folder already exists, it is preserved. The builder audits and serves that existing package rather than overwriting it.
 
