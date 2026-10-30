@@ -61,7 +61,7 @@ chmod +x Build-GirlLife-HTML.sh
 
 ### 目前手機版驗證進度（2026-10-30）
 
-已在瀏覽器以 320×568、390×844、430×932、768×1024 測試 Classic 上下分區及 Stats 開關。測試時遊戲尚未顯示物品，因此 Items 面板只用測試 DOM 確認版面，實際持有物品時的內容尚未驗證。尚未以實體 iPhone/Safari 或 Windows 建置驗收。
+已在瀏覽器以 320×568、390×844、430×932、768×1024 測試 Classic 上下分區及 Stats 開關。測試時遊戲尚未顯示物品，因此 Items 面板只用測試 DOM 確認版面，實際持有物品時的內容尚未驗證。cloud-16 版面已部署至 `https://girllife.mewcat.me/`，建置器與文件已推送至 GitHub `main`（提交 `43e16d4`）。尚未以實體 iPhone/Safari 或 Windows 建置驗收。
 
 若有效的輸出資料夾已存在，建置器會保留它，改為檢查並啟動既有產物，不會覆寫。
 

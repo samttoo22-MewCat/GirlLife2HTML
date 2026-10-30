@@ -61,7 +61,7 @@ The builder creates a sibling folder named `<English game filename>_HTML`, repor
 
 ### Current mobile validation status (2026-10-30)
 
-The Classic split layout and Stats toggle were tested in the browser at 320×568, 390×844, 430×932, and 768×1024. The Items panel's layout was checked with a test DOM fixture because the tested game-start state did not contain Items; populated in-game Items content is not yet verified. Physical iPhone/Safari and Windows builds remain untested.
+The Classic split layout and Stats toggle were tested in the browser at 320×568, 390×844, 430×932, and 768×1024. The Items panel's layout was checked with a test DOM fixture because the tested game-start state did not contain Items; populated in-game Items content is not yet verified. The cloud-16 layout is deployed at `https://girllife.mewcat.me/` and the builder/docs are on GitHub `main` (commit `43e16d4`). Physical iPhone/Safari and Windows builds remain untested.
 
 If a valid output folder already exists, it is preserved. The builder audits and serves that existing package rather than overwriting it.
 
