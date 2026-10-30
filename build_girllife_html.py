@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-12"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-15"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -429,17 +429,66 @@ CLOUD_SAVE_UI_JS = r'''(() => {
   mediaObserver.observe(document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ["src", "poster", "style"]});
   warmCurrentScene();
 
-  // On phones the QSP theme can make its view background fill the entire
-  // viewport. A touch in the visible backdrop should still dismiss the view.
-  document.addEventListener("pointerup", event => {
-    if (event.pointerType !== "touch") return;
-    const view = event.target && event.target.closest && event.target.closest("qsp-view");
-    if (!view || view.hidden || getComputedStyle(view).display === "none") return;
-    if (event.target.closest("img, video, button, a, input, select, textarea")) return;
-    event.preventDefault();
-    event.stopPropagation();
-    view.click();
+  let outsideTouchPending = false;
+  function dismissViewFromOutside(event, x, y, pointerType = "touch") {
+    const view = document.querySelector("#portal-container .qsp-dialog-container qsp-view[modal]") ||
+      document.querySelector("#portal-container qsp-view[modal]");
+    if (view) {
+      const media = view.querySelector("img, video");
+      const rect = media && media.getBoundingClientRect();
+      const inside = rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+      if (inside) return false;
+      const dialog = view.closest(".qsp-dialog-container");
+      const backdrop = dialog && dialog.previousElementSibling &&
+        dialog.previousElementSibling.matches(".qsp-overlay") ? dialog.previousElementSibling : null;
+      if (!backdrop) return false;
+      // Let Radix's own DismissableLayer handle an outside pointerdown. Escape
+      // bubbles into the game-level pause handler and can close both dialogs.
+      backdrop.dispatchEvent(new PointerEvent("pointerdown", {
+        bubbles: true, cancelable: true, pointerType, pointerId: 1,
+        isPrimary: true, button: 0, buttons: 1, clientX: x, clientY: y
+      }));
+      return true;
+    }
+    const target = event.target;
+    const nonModalView = target && target.closest && target.closest("qsp-view");
+    if (!nonModalView || nonModalView.hidden || getComputedStyle(nonModalView).display === "none") return false;
+    if (target.closest("img, video, button, a, input, select, textarea")) return false;
+    nonModalView.click();
+    return true;
+  }
+  // The full-screen Radix content may be the hit target instead of its sibling
+  // backdrop. Forward an outside pointerdown to that backdrop so Radix closes
+  // only the topmost image layer (not an underlying pause panel).
+  document.addEventListener("pointerdown", event => {
+    if (event.pointerType === "mouse") {
+      dismissViewFromOutside(event, event.clientX, event.clientY, "mouse");
+    }
   }, true);
+  document.addEventListener("pointerup", event => {
+    if (event.pointerType !== "touch" || outsideTouchPending) return;
+    outsideTouchPending = dismissViewFromOutside(event, event.clientX, event.clientY, "touch");
+    if (outsideTouchPending) setTimeout(() => { outsideTouchPending = false; }, 800);
+  }, true);
+  document.addEventListener("touchend", event => {
+    if (outsideTouchPending) return;
+    const touch = event.changedTouches && event.changedTouches[0];
+    if (touch) {
+      outsideTouchPending = dismissViewFromOutside(event, touch.clientX, touch.clientY, "touch");
+      if (outsideTouchPending) setTimeout(() => { outsideTouchPending = false; }, 800);
+    }
+  }, {capture: true, passive: false});
+
+  document.addEventListener("click", event => {
+    const button = event.target && event.target.closest && event.target.closest("[data-mobile-panel]");
+    if (!button) return;
+    const player = button.closest("qsp-player");
+    if (!player) return;
+    const selected = button.getAttribute("aria-pressed") !== "true";
+    player.querySelectorAll("[data-mobile-panel]").forEach(item => {
+      item.setAttribute("aria-pressed", item === button && selected ? "true" : "false");
+    });
+  });
 
   window.girllifeCloudCredentials = options => openCredentials(options || {});
   window.girllifeCloudAccountStatus = info => openStatus(info || {});
@@ -661,15 +710,16 @@ MOBILE_LAYOUT_CSS = """
   }
   .mobile-panel-control {
     display: block;
-    position: absolute;
-    z-index: 1000;
-    top: max(8px, env(safe-area-inset-top));
-    left: 8px;
-    right: 8px;
+    position: fixed;
+    z-index: 1300;
+    inset: 0;
+    pointer-events: none;
   }
-  .mobile-panel-select {
+  .mobile-panel-toggle {
+    position: absolute;
+    right: 8px;
     display: block;
-    width: 100%;
+    min-width: 76px;
     min-height: 44px;
     padding: 8px 12px;
     border: 1px solid var(--border-color, #777);
@@ -677,6 +727,18 @@ MOBILE_LAYOUT_CSS = """
     background: var(--background-color, #fff);
     color: var(--background-color-contrast, #111);
     font: 16px system-ui, sans-serif;
+    pointer-events: auto;
+    touch-action: manipulation;
+  }
+  .mobile-panel-toggle[data-mobile-panel="objects"] {
+    top: max(8px, env(safe-area-inset-top));
+  }
+  .mobile-panel-toggle[data-mobile-panel="stats"] {
+    bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  .mobile-panel-toggle[aria-pressed="true"] {
+    background: var(--background-color-inverted, #333);
+    color: var(--background-color-inverted-contrast, #fff);
   }
   qsp-main {
     left: 8px;
@@ -786,8 +848,8 @@ MOBILE_LAYOUT_CSS = """
     background: var(--background-color, #fff);
     box-shadow: 0 4px 20px rgb(0 0 0 / 35%);
   }
-  .aero-theme:has(.mobile-panel-select option[value="objects"]:checked) qsp-objects,
-  .aero-theme:has(.mobile-panel-select option[value="stats"]:checked) qsp-stats {
+  .aero-theme:has(.mobile-panel-toggle[data-mobile-panel="objects"][aria-pressed="true"]) qsp-objects,
+  .aero-theme:has(.mobile-panel-toggle[data-mobile-panel="stats"][aria-pressed="true"]) qsp-stats {
     display: block !important;
   }
   qsp-stats-content,
@@ -806,6 +868,211 @@ MOBILE_LAYOUT_CSS = """
   }
 }
 """
+
+MOBILE_COMMON_CSS = """
+
+/* GirlLife mobile layout shared by qSpider Classic and Aero themes. */
+.mobile-panel-control {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .mobile-panel-control {
+    display: block;
+    position: fixed;
+    z-index: 1300;
+    inset: 0;
+    pointer-events: none;
+  }
+  .mobile-panel-toggle {
+    position: absolute;
+    right: 8px;
+    display: block;
+    min-width: 76px;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color, #777);
+    border-radius: 6px;
+    background: var(--background-color, #fff);
+    color: var(--background-color-contrast, #111);
+    font: 16px system-ui, sans-serif;
+    pointer-events: auto;
+    touch-action: manipulation;
+  }
+  .mobile-panel-toggle[data-mobile-panel="objects"] {
+    top: max(8px, env(safe-area-inset-top));
+  }
+  .mobile-panel-toggle[data-mobile-panel="stats"] {
+    bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  .mobile-panel-toggle[aria-pressed="true"] {
+    background: var(--background-color-inverted, #333);
+    color: var(--background-color-inverted-contrast, #fff);
+  }
+  qsp-player,
+  qsp-cl,
+  qsp-cl-layer,
+  qsp-cl-dock,
+  qsp-cl-pane {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100vw;
+  }
+  qsp-cl-layer,
+  qsp-cl-dock,
+  qsp-cl-pane {
+    min-height: 0;
+  }
+  qsp-cl-layer {
+    height: 100%;
+    overflow: hidden;
+  }
+  qsp-cl {
+    position: relative;
+    display: block;
+    width: 100vw;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  qsp-cl > qsp-cl-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  qsp-cl qsp-main > .panel-background {
+    box-sizing: border-box;
+    padding-top: calc(56px + env(safe-area-inset-top));
+  }
+  qsp-cl-layer:has(> qsp-cl-dock[data-place="bottom"] qsp-cl-pane > qsp-actions) {
+    grid-template-rows: minmax(0, 1fr) minmax(220px, 32dvh) !important;
+  }
+  qsp-cl qsp-main,
+  qsp-cl qsp-actions,
+  qsp-cl qsp-stats,
+  qsp-cl qsp-objects {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  qsp-player [data-radix-scroll-area-viewport] > div {
+    display: block !important;
+    box-sizing: border-box;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  qsp-main-content,
+  qsp-stats-content,
+  qsp-objects-list {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  qsp-main-content,
+  qsp-stats-content,
+  qsp-objects-list,
+  qsp-actions-list {
+    font-size: clamp(16px, 4vw, 20px);
+    line-height: 1.4;
+  }
+  qsp-main-content img,
+  qsp-main-content video,
+  qsp-stats-content img,
+  qsp-objects-list img,
+  .view-container img,
+  qsp-view img,
+  qsp-view video {
+    display: block;
+    box-sizing: border-box;
+    max-width: min(100%, calc(100vw - 32px));
+    max-height: 52dvh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    margin-inline: auto;
+  }
+  qsp-player .action-item,
+  #portal-container .action-item,
+  qsp-player .qsp-button,
+  #portal-container .qsp-button {
+    box-sizing: border-box;
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 16px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  qsp-cmd input {
+    box-sizing: border-box;
+    min-height: 44px;
+    font-size: 16px;
+  }
+  #portal-container .qsp-dialog-container > * {
+    box-sizing: border-box;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  #portal-container qsp-view .view-container {
+    width: min(calc(100vw - 48px), 80vw);
+    height: min(calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 80vh);
+  }
+
+  /* Classic theme side panels are selectable overlays instead of shrinking
+     the already narrow main column. */
+  qsp-player:has(.mobile-panel-control) qsp-cl qsp-objects,
+  qsp-player:has(.mobile-panel-control) qsp-cl qsp-stats {
+    display: none !important;
+  }
+  qsp-player:has(.mobile-panel-toggle[data-mobile-panel="objects"][aria-pressed="true"]) qsp-cl-dock[data-place="right"] {
+    display: block !important;
+    position: fixed !important;
+    z-index: 1200;
+    top: calc(64px + env(safe-area-inset-top));
+    left: 8px;
+    right: 8px;
+    bottom: calc(32dvh + 8px + env(safe-area-inset-bottom));
+    width: auto !important;
+    height: auto !important;
+    overflow: auto;
+    background: var(--background-color, #fff);
+    box-shadow: 0 4px 20px rgb(0 0 0 / 35%);
+  }
+  qsp-player:has(.mobile-panel-toggle[data-mobile-panel="objects"][aria-pressed="true"]) qsp-cl-pane:has(> qsp-objects),
+  qsp-player:has(.mobile-panel-toggle[data-mobile-panel="objects"][aria-pressed="true"]) qsp-objects {
+    display: block !important;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+  }
+  qsp-player:has(.mobile-panel-toggle[data-mobile-panel="stats"][aria-pressed="true"]) qsp-cl-pane:has(> qsp-stats) {
+    display: block !important;
+    position: fixed !important;
+    z-index: 1200;
+    left: 8px;
+    right: 8px;
+    top: calc(64px + env(safe-area-inset-top));
+    bottom: calc(32dvh + 8px + env(safe-area-inset-bottom));
+    width: auto !important;
+    height: auto !important;
+    overflow: auto;
+    background: var(--background-color, #fff);
+    box-shadow: 0 4px 20px rgb(0 0 0 / 35%);
+  }
+  qsp-player:has(.mobile-panel-toggle[data-mobile-panel="stats"][aria-pressed="true"]) qsp-stats {
+    display: block !important;
+    width: 100%;
+    height: 100%;
+  }
+}
+"""
+
+MOBILE_PANEL_CONTROL = '''<div class="mobile-panel-control" aria-label="Side panels">
+  <button type="button" class="mobile-panel-toggle" data-mobile-panel="objects" aria-pressed="false">Items</button>
+  <button type="button" class="mobile-panel-toggle" data-mobile-panel="stats" aria-pressed="false">Stats</button>
+</div>'''
 
 MEDIA_PATH_RE = re.compile(
     r"(?i)(?P<path>(?:images|sound)[/\\][^\"'<>|,;\r\n]*?\.(?:jpg|jpeg|png|gif|bmp|webp|mp3|ogg|wav|mp4|webm))(?=$|[\s\"'<>|,;)&])"
@@ -872,6 +1139,15 @@ def unpack_player(archive_path: Path, destination: Path) -> None:
 
 
 def apply_mobile_layout(output: Path) -> None:
+    shared = output / "themes" / "common.css"
+    if not shared.is_file():
+        raise RuntimeError("qSpider common stylesheet is missing; cannot enable shared phone layout.")
+    shared_css = shared.read_text(encoding="utf-8")
+    common_marker = "/* GirlLife mobile layout shared by qSpider Classic and Aero themes. */"
+    if common_marker in shared_css:
+        shared_css = shared_css.split(common_marker, 1)[0].rstrip()
+    shared.write_text(shared_css + MOBILE_COMMON_CSS, encoding="utf-8")
+
     stylesheet = output / "themes" / "aero.css"
     if not stylesheet.is_file():
         raise RuntimeError("qSpider Aero stylesheet is missing; cannot enable phone layout.")
@@ -994,6 +1270,41 @@ def apply_cloud_saves(output: Path) -> None:
     ui = output / "cloud-saves-ui.js"
     if not ui.is_file() or ui.read_text(encoding="utf-8") != CLOUD_SAVE_UI_JS:
         write_file(ui, CLOUD_SAVE_UI_JS)
+
+    for theme_name in ("aero.html", "classic.html"):
+        theme = output / "themes" / theme_name
+        if not theme.is_file():
+            continue
+        markup = theme.read_text(encoding="utf-8")
+        common_link = f'<css-link src="qspider:themes/common.css?v={CLOUD_SAVE_CACHE_VERSION}"></css-link>'
+        markup = re.sub(
+            r'<css-link src="qspider:themes/common\.css(?:\?v=[^"]*)?"></css-link>',
+            common_link,
+            markup,
+            count=1,
+        )
+        if 'class="mobile-panel-control"' in markup:
+            markup = re.sub(
+                r'<div class="mobile-panel-control"[^>]*>.*?</div>',
+                MOBILE_PANEL_CONTROL,
+                markup,
+                count=1,
+                flags=re.DOTALL,
+            )
+        else:
+            anchor = "<qsp-player>"
+            if markup.count(anchor) != 1:
+                raise RuntimeError(f"Could not add the phone panel menu to {theme_name}.")
+            markup = markup.replace(anchor, anchor + "\n      " + MOBILE_PANEL_CONTROL, 1)
+        if theme_name == "classic.html":
+            markup = re.sub(
+                r'<css-link src="qspider:themes/classic\.css(?:\?v=[^"]*)?"></css-link>',
+                f'<css-link src="qspider:themes/classic.css?v={CLOUD_SAVE_CACHE_VERSION}"></css-link>',
+                markup,
+                count=1,
+            )
+        if markup != theme.read_text(encoding="utf-8"):
+            theme.write_text(markup, encoding="utf-8")
 
     for theme_name in ("aero.html", "classic.html"):
         theme = output / "themes" / theme_name
@@ -1485,6 +1796,7 @@ def main() -> int:
         if not (output / "index.html").is_file() or not (output / "game" / game.name).is_file():
             raise RuntimeError(f"既有輸出資料夾不完整，為避免覆蓋已停止：{output.name}")
         print(f"找到既有產物，不覆蓋：{output}")
+        apply_mobile_layout(output)
         apply_cloud_saves(output)
         apply_loading_progress(output)
         ensure_compressed_qsp(output)
