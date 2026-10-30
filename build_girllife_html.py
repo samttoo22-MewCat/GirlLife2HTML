@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-17"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-18"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -745,7 +745,7 @@ MOBILE_LAYOUT_CSS = """
     top: 0;
     box-sizing: border-box;
     width: 100vw;
-    height: 50dvh;
+    height: 60dvh;
     padding-top: calc(56px + env(safe-area-inset-top));
     overflow: auto;
     background-size: 100% 100%;
@@ -803,11 +803,11 @@ MOBILE_LAYOUT_CSS = """
   .regular-actions {
     left: 0;
     right: 0;
-    top: 50dvh;
+    top: 60dvh;
     bottom: 0;
     box-sizing: border-box;
     width: 100vw;
-    height: 50dvh;
+    height: 40dvh;
     overflow: auto;
     background-size: 100% 100%;
   }
@@ -843,7 +843,7 @@ MOBILE_LAYOUT_CSS = """
     z-index: 100;
     left: 8px;
     right: 8px;
-    top: 50dvh;
+    top: 60dvh;
     bottom: 0;
     width: auto;
     height: auto;
@@ -858,11 +858,11 @@ MOBILE_LAYOUT_CSS = """
   }
   .aero-theme:has(.mobile-panel-toggle[data-mobile-panel="objects"][aria-pressed="true"]) qsp-objects {
     top: 0;
-    bottom: 50dvh;
+    bottom: 40dvh;
     padding-top: calc(56px + env(safe-area-inset-top));
   }
   .aero-theme:has(.mobile-panel-toggle[data-mobile-panel="stats"][aria-pressed="true"]) qsp-stats {
-    top: 50dvh;
+    top: 60dvh;
     bottom: 0;
     padding-bottom: calc(56px + env(safe-area-inset-bottom));
   }
