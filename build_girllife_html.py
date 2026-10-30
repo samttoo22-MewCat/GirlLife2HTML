@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-15"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-16"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -945,7 +945,7 @@ MOBILE_COMMON_CSS = """
     padding-top: calc(56px + env(safe-area-inset-top));
   }
   qsp-cl-layer:has(> qsp-cl-dock[data-place="bottom"] qsp-cl-pane > qsp-actions) {
-    grid-template-rows: minmax(0, 1fr) minmax(220px, 32dvh) !important;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) !important;
   }
   qsp-cl qsp-main,
   qsp-cl qsp-actions,
@@ -1020,22 +1020,24 @@ MOBILE_COMMON_CSS = """
     height: min(calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 80vh);
   }
 
-  /* Classic theme side panels are selectable overlays instead of shrinking
-     the already narrow main column. */
-  qsp-player:has(.mobile-panel-control) qsp-cl qsp-objects,
-  qsp-player:has(.mobile-panel-control) qsp-cl qsp-stats {
+  /* With side panels closed, let the main/actions panes use the full width.
+     Items replaces the upper main pane; Stats replaces the lower actions pane. */
+  qsp-player:has(.mobile-panel-control) qsp-cl-pane:has(> qsp-objects),
+  qsp-player:has(.mobile-panel-control) qsp-cl-pane:has(> qsp-stats) {
     display: none !important;
   }
   qsp-player:has(.mobile-panel-toggle[data-mobile-panel="objects"][aria-pressed="true"]) qsp-cl-dock[data-place="right"] {
     display: block !important;
     position: fixed !important;
     z-index: 1200;
-    top: calc(64px + env(safe-area-inset-top));
+    top: 0;
     left: 8px;
     right: 8px;
-    bottom: calc(32dvh + 8px + env(safe-area-inset-bottom));
+    bottom: 50dvh;
     width: auto !important;
     height: auto !important;
+    box-sizing: border-box;
+    padding-top: calc(56px + env(safe-area-inset-top));
     overflow: auto;
     background: var(--background-color, #fff);
     box-shadow: 0 4px 20px rgb(0 0 0 / 35%);
@@ -1053,10 +1055,13 @@ MOBILE_COMMON_CSS = """
     z-index: 1200;
     left: 8px;
     right: 8px;
-    top: calc(64px + env(safe-area-inset-top));
-    bottom: calc(32dvh + 8px + env(safe-area-inset-bottom));
+    top: 50dvh;
+    bottom: 0;
     width: auto !important;
     height: auto !important;
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
     overflow: auto;
     background: var(--background-color, #fff);
     box-shadow: 0 4px 20px rgb(0 0 0 / 35%);
