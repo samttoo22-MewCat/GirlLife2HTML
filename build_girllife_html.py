@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-16"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-17"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -741,10 +741,12 @@ MOBILE_LAYOUT_CSS = """
     color: var(--background-color-inverted-contrast, #fff);
   }
   qsp-main {
-    left: 8px;
-    top: calc(max(8px, env(safe-area-inset-top)) + 56px);
-    width: calc(100% - 16px);
-    height: calc(100dvh - 42dvh - 82px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    left: 0;
+    top: 0;
+    box-sizing: border-box;
+    width: 100vw;
+    height: 50dvh;
+    padding-top: calc(56px + env(safe-area-inset-top));
     overflow: auto;
     background-size: 100% 100%;
   }
@@ -799,11 +801,13 @@ MOBILE_LAYOUT_CSS = """
     pointer-events: auto;
   }
   .regular-actions {
-    left: 8px;
-    bottom: calc(50px + env(safe-area-inset-bottom));
-    top: auto;
-    width: calc(100% - 16px);
-    height: 30dvh;
+    left: 0;
+    right: 0;
+    top: 50dvh;
+    bottom: 0;
+    box-sizing: border-box;
+    width: 100vw;
+    height: 50dvh;
     overflow: auto;
     background-size: 100% 100%;
   }
@@ -839,8 +843,8 @@ MOBILE_LAYOUT_CSS = """
     z-index: 100;
     left: 8px;
     right: 8px;
-    top: calc(max(8px, env(safe-area-inset-top)) + 58px);
-    bottom: calc(8px + env(safe-area-inset-bottom));
+    top: 50dvh;
+    bottom: 0;
     width: auto;
     height: auto;
     padding: 12px;
@@ -851,6 +855,16 @@ MOBILE_LAYOUT_CSS = """
   .aero-theme:has(.mobile-panel-toggle[data-mobile-panel="objects"][aria-pressed="true"]) qsp-objects,
   .aero-theme:has(.mobile-panel-toggle[data-mobile-panel="stats"][aria-pressed="true"]) qsp-stats {
     display: block !important;
+  }
+  .aero-theme:has(.mobile-panel-toggle[data-mobile-panel="objects"][aria-pressed="true"]) qsp-objects {
+    top: 0;
+    bottom: 50dvh;
+    padding-top: calc(56px + env(safe-area-inset-top));
+  }
+  .aero-theme:has(.mobile-panel-toggle[data-mobile-panel="stats"][aria-pressed="true"]) qsp-stats {
+    top: 50dvh;
+    bottom: 0;
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
   }
   qsp-stats-content,
   qsp-objects-list {
@@ -970,6 +984,21 @@ MOBILE_COMMON_CSS = """
     min-width: 0;
     max-width: 100%;
     overflow-wrap: anywhere;
+  }
+  qsp-main-content table.classic-table {
+    width: max-content !important;
+    min-width: max-content;
+    max-width: none;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  qsp-main-content center:has(> table.classic-table) {
+    text-align: left !important;
+  }
+  qsp-main-content table.classic-table th,
+  qsp-main-content table.classic-table td {
+    overflow-wrap: normal;
+    word-break: normal;
   }
   qsp-main-content,
   qsp-stats-content,
