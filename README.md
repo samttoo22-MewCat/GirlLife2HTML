@@ -63,7 +63,7 @@ The builder creates a sibling folder named `<English game filename>_HTML`, repor
 
 The Classic split layout and Stats toggle were tested in the browser at 320×568, 390×844, 430×932, and 768×1024. The Items panel's layout was checked with a test DOM fixture because the tested game-start state did not contain Items; populated in-game Items content is not yet verified. The cloud-16 layout is deployed at `https://girllife.mewcat.me/` and the builder/docs are on GitHub `main` (commit `43e16d4`). Physical iPhone/Safari and Windows builds remain untested.
 
-The cloud-20 mobile follow-up enlarges the main pane to 70% in both Classic and Aero, reserving approximately 60% of the viewport for its scrollable game content after the Items control inset; the action pane occupies 30%. This follow-up specifically checks layouts after entering story gameplay, not just the title/create screens. The previous cloud-19 split is deployed at `https://girllife.mewcat.me/`; this cloud-20 follow-up is being verified before deployment. Physical iPhone/Safari and Windows builds are not yet verified.
+The cloud-21 fix collapses Classic’s reserved 215px right grid track when the inventory mounts during gameplay. Hiding only the inventory pane left this track empty and squeezed the main window to the left; the main/actions now use full viewport width, while Items still opens as an overlay. Local checks reached the cottage and guest room with the real inventory mounted at 320×568, 390×844 and 430×932, with no page overflow. The 70/30 vertical split is unchanged. Physical-phone and Windows execution remain unverified.
 
 If a valid output folder already exists, it is preserved. The builder audits and serves that existing package rather than overwriting it.
 

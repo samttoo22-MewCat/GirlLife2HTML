@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-20"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-21"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -1051,6 +1051,13 @@ MOBILE_COMMON_CSS = """
 
   /* With side panels closed, let the main/actions panes use the full width.
      Items replaces the upper main pane; Stats replaces the lower actions pane. */
+  qsp-player:has(.mobile-panel-control) qsp-cl-layer:has(> qsp-cl-dock[data-place="right"]) {
+    grid-template-columns: minmax(0, 1fr) 0 !important;
+    column-gap: 0 !important;
+  }
+  qsp-player:has(.mobile-panel-control) qsp-cl-dock[data-place="right"] {
+    display: none !important;
+  }
   qsp-player:has(.mobile-panel-control) qsp-cl-pane:has(> qsp-objects),
   qsp-player:has(.mobile-panel-control) qsp-cl-pane:has(> qsp-stats) {
     display: none !important;
