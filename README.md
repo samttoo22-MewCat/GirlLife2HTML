@@ -4,11 +4,28 @@
 
 Build and run a browser-playable package of the original English Girl Life QSP game using the official QSPFoundation qSpider player.
 
-This repository contains the builder only. It does not include the game, images, sounds, or generated game package. Provide the game and assets you are authorized to use.
+> **Builder only:** this repository does not include the game, images, sounds, or generated game package. Provide the game and assets you are authorized to use.
+
+## Contents
+
+- [Screenshots](#screenshots)
+- [Requirements](#requirements)
+- [Folder layout](#folder-layout)
+- [Build and run](#build-and-run)
+- [Loading and mobile interface](#loading-and-mobile-interface)
+- [Validation status](#validation-status)
+- [Cloud saves](#cloud-saves)
+- [Server configuration](#server-configuration)
+- [Asset discovery and missing files](#asset-discovery-and-missing-files)
+- [Scope and limitations](#scope-and-limitations)
+- [License](#license)
 
 ## Screenshots
 
-Captured from the live cloud-21 site on 2026-11-01. Mobile views use a simulated 390×844 touch viewport, not a physical-phone capture. The account screen is the shared registration/sign-in dialog, with no credentials entered; background game images are hidden in that screenshot. Game content belongs to its respective creators.
+- **Source:** live cloud-21 site, captured on 2026-11-01.
+- **Mobile:** simulated 390×844 touch viewport, not a physical phone.
+- **Account dialog:** shared registration/sign-in screen, with no credentials entered; background game images are hidden in this screenshot.
+- **Credits:** game content belongs to its respective creators.
 
 ### Mobile interface and account dialog
 
@@ -26,7 +43,17 @@ Captured from the live cloud-21 site on 2026-11-01. Mobile views use a simulated
 - A `sound/` directory or, optionally, a recognized sound ZIP archive
 - Internet access for the first build, to download the qSpider v1.3.1 player
 
-The launchers check for Python 3.10 or newer. If none is available, they ask before downloading the official installer from [python.org](https://www.python.org/downloads/). Answer `y` to continue or press Enter to cancel. The downloaded installer is signature-checked before it is opened or run. macOS then opens its installer UI; Windows installs Python for the current user. No administrator access is requested by the Windows install command.
+### Python setup
+
+1. The launcher checks for **Python 3.10 or newer**.
+2. If missing, it asks before downloading the official installer from [python.org](https://www.python.org/downloads/).
+3. Answer `y` to continue, or press Enter to cancel.
+4. The installer signature is checked before opening or running it.
+
+| Platform | Installation behavior |
+| --- | --- |
+| macOS | Opens the official installer UI. |
+| Windows | Installs for the current user; the install command does not request administrator access. |
 
 No third-party Python packages are required.
 
@@ -46,7 +73,9 @@ GirlLife/
 └── sound/                 # optional; audio is absent if not provided
 ```
 
-The builder selects an English `.qsp` file (its filename must not contain `_cn`). If there is more than one, it asks you to choose. It can also use a `sound/` folder in the parent directory when that is the only adjacent sound folder it finds.
+- **Game selection:** the English `.qsp` filename must not contain `_cn`.
+- **Multiple games:** the builder asks you to choose one.
+- **Sound fallback:** it can use the parent directory's `sound/` folder when that is the only adjacent sound folder found.
 
 ## Build and run
 
@@ -67,32 +96,132 @@ chmod +x Build-GirlLife-HTML.sh
 
 ### Windows
 
-Double-click `Build-GirlLife-HTML.bat`. It uses the included PowerShell launcher to check, request consent for, and if needed install Python before running the builder. PowerShell is included with supported Windows versions.
+1. Double-click **`Build-GirlLife-HTML.bat`**.
+2. The included PowerShell launcher checks Python and asks for consent before any required download/install.
+3. The builder starts after the prerequisite check.
 
-The builder creates a sibling folder named `<English game filename>_HTML`, reports missing media, starts a local web server on a dynamically assigned port, prints the local URL, and tries to open it in your browser. A progress bar reports the game file and media bytes as they download, then shows elapsed seconds while the loaded game is being prepared. The builder creates a reusable gzip copy of the QSP; supporting servers send it automatically, reducing the current 91 MB game file to about 11 MB over the network. The original `.qsp` remains intact. The browser does not preload the entire media library: it warms images and video referenced by the current scene and currently displayed action buttons, with a small bounded queue; videos are primed for metadata, and the game still loads other assets when requested. On narrow screens (up to 900 CSS px), both Classic and Aero layouts fit the viewport, keep text and actions scrollable, and use touch-sized controls; images and videos scale to the available space. In mobile Classic and Aero, the main window uses 70% of the viewport and the action window the remaining 30%; the main text viewport is about 60% after reserving room for the upper-right Items control. Opening Items replaces the main-window area, while opening Stats replaces the action-window area. The panels have toggle buttons at the upper-right and lower-right edges, and only one panel opens at a time. Creation tables preserve horizontal cell layout and can scroll horizontally on narrow screens rather than squeezing words into vertical-looking columns. Popup media is centered over a dark backdrop; tap outside the actual image/video to close only that popup. These changes have been browser-tested at phone and tablet viewport sizes, but not on a physical iPhone/Safari device. Keep the launcher window open while playing. Press `Ctrl+C` in that window to stop the server.
+PowerShell is included with supported Windows versions. **Windows execution remains unverified.**
 
-### Current mobile validation status (2026-10-30)
+### What happens next
 
-**Live version: cloud-21**, deployed at `https://girllife.mewcat.me/`. The builder and bilingual documentation are pushed to GitHub `main`; the layout fix is commit `0ac3645`. The service was restarted and is active, the homepage returns HTTP 200, and all four deployed frontend files match their local SHA-256 hashes.
+1. Creates a sibling folder named `<English game filename>_HTML`.
+2. Audits assets and reports missing media.
+3. Starts a local server on a dynamically assigned port.
+4. Prints the URL and tries to open it in your browser.
 
-The cloud-21 fix collapses Classic’s reserved 215px right grid track when the inventory mounts during gameplay. Hiding only the inventory pane left this track empty and squeezed the main window to the left; the main/actions now use full viewport width, while Items still opens as an overlay. Local checks reached the cottage and guest room with the real inventory mounted at 320×568, 390×844 and 430×932, with no page overflow. The 70/30 vertical split is unchanged. Physical-phone and Windows execution remain unverified.
+> **Keep the launcher window open while playing.** Press `Ctrl+C` in that window to stop the server.
+
+If a valid output folder already exists, it is preserved: the builder audits and serves it instead of overwriting it.
+
+## Loading and mobile interface
+
+### Loading performance
+
+- **Download progress:** shows game/media bytes as they download, then elapsed seconds while the game is being prepared.
+- **Compressed transfer:** creates a reusable `.qsp.gz` copy; supporting servers reduce the current game transfer from about **91 MB to 11 MB**. The original `.qsp` stays intact.
+- **Scene media warming:** uses a bounded queue for images/videos referenced by the current scene and visible actions, rather than preloading the entire library.
+- **Video limits:** warms metadata, not necessarily the entire video. Other assets load when requested.
+
+### Mobile layout
+
+Applies to **Classic and Aero at widths up to 900 CSS px**.
+
+| Element | Behavior |
+| --- | --- |
+| Main / actions | Full-width panes with a 70% / 30% vertical split. |
+| Main text viewport | Approximately 60% of screen height after reserving space for the Items control; varies with viewport size. |
+| Items | Upper-right toggle; opens an overlay in the main-pane area. |
+| Stats | Lower-right toggle; opens an overlay in the actions-pane area. |
+| Side panels | Only one can be open at a time. |
+| Content and actions | Independently scrollable, with touch-sized controls. |
+| Creation tables | Preserve horizontal columns; scroll sideways on narrow screens. |
+| Images and videos | Scale to available space. |
+| Media popup | Centered on a dark backdrop; tapping outside closes only that popup. |
+
+## Validation status
+
+**Last deployment verification: 2026-10-30.** This is a recorded result, not a continuous uptime check.
+
+| Check | Recorded result |
+| --- | --- |
+| Live version | **cloud-21** at `https://girllife.mewcat.me/` |
+| Source | Builder/docs on GitHub `main`; layout fix `0ac3645` |
+| Service | Restarted; `active` |
+| Homepage | HTTP 200 |
+| Deployed frontend files | All four SHA-256 hashes matched local files |
+
+### Latest fix: full-width gameplay
+
+- **Cause:** mounting inventory added a 215px right grid track in Classic. Hiding the inventory pane alone left that space reserved.
+- **Fix:** cloud-21 collapses that track; main/actions use the full width while Items still opens as an overlay. The 70/30 vertical split is unchanged.
+- **Local verification:** reached the cottage and guest room with inventory mounted at **320×568, 390×844, and 430×932**, with no page overflow.
 
 - Public-site validation reached the grandparents' cottage with inventory mounted: at a 390px viewport, the main pane measures the full 390px and the right grid track is 0px. Local Items overlay opening/closing was also checked.
 - Earlier prologue-only checks missed the inventory-triggered grid change; changing the vertical split did not fix the reported blank area on the right.
 - These checks do not verify the exact Pavlovsk bedroom shown in the user's screenshot, every inventory interaction, or all gameplay paths. Physical Android/iPhone/Safari and Windows execution remain unverified.
 - This update changed only frontend layout files; the original QSP/media and production accounts, saves, and database content were not modified.
 
-If a valid output folder already exists, it is preserved. The builder audits and serves that existing package rather than overwriting it.
+> **Still unverified:** physical Android/iPhone/Safari, Windows execution, the exact Pavlovsk bedroom from the report, all inventory interactions, and full gameplay coverage.
 
 ## Cloud saves
 
-The generated player stores numbered slots, named saves, and quick saves on the GirlLife cloud service at `girllife.mewcat.me`. Cloud saves require an account, so opening the **Saves** panel or the title-screen **LOAD** button asks for one first. On a device that has never been signed in, the dialog leads with **Create account** and the button is offered before **Sign in**, so a new player is pointed at registration; **Sign in** stays available for anyone who already has an account, and picking **Create account** with a name that already exists switches the dialog back to **Sign in** and keeps what you typed. Creating an account needs a name and a single password (no confirmation field). Sign in with that account on other devices to access the same saves. The signed-in session is remembered on the device with a `localStorage` entry, so reloading the page or reopening the browser keeps you signed in until the 7-day server session expires; press **Cloud account** in the pause menu and choose **Sign out** to forget it, for example before using a shared computer. Account names are 3–32 ASCII letters, numbers, dots, dashes, or underscores. Passwords have no minimum length; any non-empty password up to 1024 characters is accepted and stored only as a salted scrypt hash. An internet connection is required for cloud saves; the game itself can still be served locally.
+Supports **numbered slots, named saves, and quick saves** through `girllife.mewcat.me`.
 
-Passwords are stored as salted scrypt hashes; bearer session tokens are also hashed in the database and the raw token is kept in the browser's `localStorage` so a reload keeps you signed in. Save contents are stored in the server's SQLite database without application-level encryption. Each save is limited to 4 MB, and each account can store up to 512 saves or 256 MB total. Keep a separate copy of important saves; availability depends on the hosted service.
+### Register and sign in
 
-### Running the cloud-save service
+1. Open **Saves** or the title-screen **LOAD** button.
+2. On a device never signed in before, **Create account** is offered first; existing users can choose **Sign in**.
+3. Enter an account name and one password; **no confirmation field** is required.
+4. If that name already exists, the dialog switches to sign-in mode and preserves your input.
+5. Sign in on another device with the same account to access the same saves.
 
-`girllife_server.py` serves both the package and `/api/...` from one process. It keeps HTTP/1.1 connections alive, creates the SQLite schema once at start-up instead of on every request, reuses one WAL connection per worker thread, and keeps per-account save counts and byte totals in an `account_usage` table maintained by database triggers, so saving never has to scan an account's rows. Work beyond `GIRLLIFE_MAX_CONCURRENT_REQUESTS` (default 96) is rejected with `503` and `Retry-After` instead of spawning unbounded threads, and idle connections are dropped after `GIRLLIFE_REQUEST_TIMEOUT` seconds (default 65). Other settings: `GIRLLIFE_SAVE_DATABASE` (database path) and `GIRLLIFE_PORT` (default 8081). A reverse proxy in front of it needs HTTP/1.1 upstream keep-alive to pass the connection reuse through. Older databases are upgraded in place on the first start, including the usage counters.
+| Setting | Requirement |
+| --- | --- |
+| Account name | 3–32 ASCII letters, digits, dots, dashes, or underscores |
+| Password | Non-empty; up to 1024 characters; no additional minimum length |
+| Network | Required for cloud saves; the game can still be served locally |
+
+### Remembered sessions
+
+- Browser `localStorage` remembers the session under `girllife.cloud.session` across reloads and browser restarts.
+- Server-side sessions expire after **7 days**.
+- To forget the local session, choose **Cloud account → Sign out** in the pause menu.
+- Sign-out clears this device's record only; the server session remains until expiry. Remember to sign out on shared computers.
+
+### Storage, privacy, and limits
+
+| Item | Storage / limit |
+| --- | --- |
+| Passwords | Salted scrypt hashes |
+| Session tokens | Hashed in the database; raw token in browser `localStorage` |
+| Save contents | Server SQLite database; **no application-level encryption** |
+| One save | Up to **4 MB** |
+| One account | Up to **512 saves** or **256 MB** total |
+
+> Keep a separate copy of important saves. Availability depends on the hosted service.
+
+## Server configuration
+
+`girllife_server.py` serves the game package and `/api/...` from one process.
+
+| Environment variable | Default / purpose |
+| --- | --- |
+| `GIRLLIFE_PORT` | `8081` |
+| `GIRLLIFE_SAVE_DATABASE` | SQLite database path |
+| `GIRLLIFE_MAX_CONCURRENT_REQUESTS` | `96`; excess work gets HTTP `503` with `Retry-After` |
+| `GIRLLIFE_REQUEST_TIMEOUT` | `65` seconds; closes idle connections |
+
+**Request and database handling:**
+
+- HTTP/1.1 keep-alive, with bounded concurrency rather than unlimited threads.
+- SQLite schema initialization once at startup, not per request.
+- One reusable WAL connection per worker thread.
+- Trigger-maintained `account_usage` counts/byte totals instead of scanning an account's saves for every write.
+
+**Deployment notes:**
+
+- A reverse proxy must enable **HTTP/1.1 upstream keep-alive** to preserve connection reuse.
+- Older databases are upgraded in place on first startup, including usage-counter backfill.
 
 ## Asset discovery and missing files
 
@@ -105,9 +234,12 @@ Passwords are stored as salted scrypt hashes; bearer session tokens are also has
 
 The original `.qsp`, asset folders, and source archives are preserved. Assets are hard-linked into the output when possible and copied when hard links are unavailable. Image patches are applied to the output package only.
 
-## What this does and does not repair
+## Scope and limitations
 
-This packages the original QSP game with the qSpider web player. It does not rewrite the game or fix bugs in the original QSP logic. Missing media is reported and skipped; gameplay defects in the source game remain.
+- **Does:** packages the original QSP game with qSpider and reports missing media.
+- **Does not:** rewrite the game or repair its internal QSP gameplay logic.
+- **Missing assets:** reported and skipped; not replaced with placeholder files.
+- **Testing:** browser checks do not establish full-game, physical-device, or Windows compatibility.
 
 ## License
 
