@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-21"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-22"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -173,9 +173,10 @@ CLOUD_SAVE_UI_JS = r'''(() => {
   const MAX_PASSWORD_CHARACTERS = 1024;
   const dialog = document.createElement("dialog");
   dialog.className = "cloud-account-dialog";
+  dialog.setAttribute("aria-labelledby", "gl-cloud-account-title");
   dialog.innerHTML = `
     <form novalidate>
-      <h2 data-role="title">Cloud save account</h2>
+      <h2 id="gl-cloud-account-title" data-role="title">Cloud save account</h2>
       <p class="cloud-account-intro" data-role="intro">Cloud saves belong to an account. Sign in, or create one with a single password.</p>
       <div class="cloud-account-fields">
         <label>Account name<input name="username" autocomplete="username" spellcheck="false" maxlength="32" required></label>
@@ -210,6 +211,23 @@ CLOUD_SAVE_UI_JS = r'''(() => {
   `;
   document.head.append(style);
   document.body.append(dialog);
+  // Radix hides body siblings while its pause dialog is open. A native modal
+  // opened above it must remain visible to assistive technology as well.
+  new MutationObserver(() => {
+    if (!dialog.open) return;
+    for (const element of [dialog, ...dialog.querySelectorAll('[data-aria-hidden="true"]')]) {
+      if (element.getAttribute("data-aria-hidden") === "true") {
+        element.removeAttribute("aria-hidden");
+        element.removeAttribute("data-aria-hidden");
+      }
+    }
+  }).observe(dialog, {subtree:true, attributes:true, attributeFilter:["open", "aria-hidden"]});
+  for (const type of ["keydown", "keyup", "keypress"]) dialog.addEventListener(type, event => event.stopPropagation());
+  window.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || !dialog.open) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (!busy) settle(null);
+  }, true);
   const form = dialog.querySelector("form");
   const fields = dialog.querySelector(".cloud-account-fields");
   const status = dialog.querySelector(".cloud-account-status");
@@ -333,6 +351,8 @@ CLOUD_SAVE_UI_JS = r'''(() => {
       request = null;
       finish = resolve;
       dialog.dataset.mode = "status";
+      title.textContent = "Cloud account";
+      intro.textContent = "Manage the cloud account signed in on this browser.";
       loginButton.hidden = true;
       createButton.hidden = true;
       signOutButton.hidden = false;
@@ -430,6 +450,11 @@ CLOUD_SAVE_UI_JS = r'''(() => {
   warmCurrentScene();
 
   let outsideTouchPending = false;
+  // Aero's non-modal View closes on any bubbled click by default. Media taps
+  // must stay inside the image/video rather than reaching its close handler.
+  document.addEventListener("click", event => {
+    if (event.target.closest && event.target.closest('qsp-view:not([modal]) img, qsp-view:not([modal]) video')) event.stopPropagation();
+  }, true);
   function dismissViewFromOutside(event, x, y, pointerType = "touch") {
     const view = document.querySelector("#portal-container .qsp-dialog-container qsp-view[modal]") ||
       document.querySelector("#portal-container qsp-view[modal]");
@@ -610,6 +635,14 @@ async function girllifeOpenPausePanel(name) {
 window.girllifeCloudSignedIn = girllifeCloudSignedIn;
 window.girllifeCloudAccount = girllifeCloudAccount;
 window.girllifeCloudSignOut = girllifeCloudForget;
+// Thin UI bridge: use qSpider's existing gated panels, never simulate game actions.
+window.girllifeBrowserCommand = async command => {
+  if (command === "saves") return girllifeOpenPausePanel("saves");
+  if (command === "account") return girllifeCloudAccount();
+  if (command === "menu") return girllifeOpenPausePanel("preferences");
+  if (command === "resume") { closePauseScreen(); return; }
+  throw new Error("Unknown browser interface command");
+};
 function cloudBase64(data) {
   const bytes = new Uint8Array(data);
   let binary = "";
@@ -682,6 +715,303 @@ WebStorage.prototype.clearSaveSlot = async function(game, slot) {
 WebStorage.prototype.clearSaveKey = async function(game, key) {
   if (await cloudReady()) await cloudRequest("DELETE", game, {key}, null);
 };
+'''
+
+BROWSER_UI_CSS = r'''
+/* GirlLife browser shell. Original artwork and code, not launcher assets. */
+:root[data-gl-shell] {
+  --gl-ink:#292735; --gl-muted:#625e70; --gl-paper:#faf8f3;
+  --gl-panel:#f1eee8; --gl-line:#d9d3c9; --gl-accent:#95631d;
+  --gl-top:56px; --gl-bottom:64px; --gl-stage:calc(100dvh - var(--gl-top) - var(--gl-bottom));
+  --gl-text:18px; --gl-picture:48dvh; --gl-main-share:70;
+}
+.gl-home, .gl-header, .gl-dock, .gl-dialog, .gl-toast {
+  box-sizing:border-box; font:16px/1.5 system-ui,-apple-system,sans-serif;
+}
+.gl-home *, .gl-dialog *, .gl-header *, .gl-dock * { box-sizing:border-box; }
+.gl-home button, .gl-dialog button, .gl-header button, .gl-dock button {
+  font:inherit; cursor:pointer; min-height:44px; border-radius:9px;
+}
+.gl-home :focus-visible, .gl-dialog :focus-visible, .gl-dock :focus-visible, .gl-header :focus-visible {
+  outline:3px solid #bf832d; outline-offset:3px;
+}
+.gl-home [hidden], .gl-dialog [hidden], .gl-home[hidden], .gl-dock[hidden], .gl-header[hidden] { display:none !important; }
+.gl-home {
+  position:fixed; inset:0; z-index:4000; overflow:auto; color:#f1edf8;
+  background:#181521; display:grid; grid-template-columns:minmax(0,1fr) minmax(380px,1fr);
+}
+.gl-art { position:relative; overflow:hidden; min-height:300px; background:linear-gradient(155deg,#1c3c57,#263753 48%,#181521 90%); }
+.gl-art::before { content:""; position:absolute; inset:0; background:radial-gradient(ellipse at 25% 32%,#839cb24d,transparent 55%),linear-gradient(90deg,transparent 60%,#181521); }
+.gl-art svg { position:absolute; width:100%; height:65%; bottom:8%; color:#bea574; opacity:.65; }
+.gl-art-caption { position:absolute; left:10%; bottom:8%; max-width:320px; }
+.gl-art-caption span, .gl-eyebrow { font-size:11px; letter-spacing:.19em; text-transform:uppercase; }
+.gl-art-caption h2 { font:400 clamp(30px,4vw,56px)/1.15 Georgia,serif; letter-spacing:-.02em; margin:12px 0; }
+.gl-home-panel { display:flex; flex-direction:column; padding:clamp(28px,5vw,80px); min-width:0; }
+.gl-wordmark { font-size:30px; font-weight:300; letter-spacing:.2em; margin:0; }
+.gl-wordmark strong { font-weight:750; }
+.gl-eyebrow { color:#b1a9c4; margin:8px 0 24px; }
+.gl-tabs { display:flex; gap:24px; border-bottom:1px solid #393343; }
+.gl-tabs button { border:0; border-radius:0; background:none; color:#aaa1bb; padding:10px 0; letter-spacing:.12em; font-size:12px; text-transform:uppercase; }
+.gl-tabs button[aria-selected="true"] { color:#fff; box-shadow:0 2px #e4ad51; }
+.gl-tabpanel { padding-top:28px; flex:1; }
+.gl-tabpanel h2 { font-size:22px; margin:0 0 10px; }
+.gl-tabpanel p { color:#c0b9cc; font-size:14px; }
+.gl-play-block { padding-top:clamp(24px,9vh,120px); }
+.gl-primary { display:block; width:100%; padding:16px 22px; border:1px solid #e2a84c; background:linear-gradient(#f2c169,#daa03e); color:#211a2b; font-weight:750 !important; box-shadow:0 8px 24px #d79a3420; }
+.gl-primary:disabled { opacity:.55; cursor:wait; }
+.gl-readiness { min-height:28px; margin:14px 0 26px; color:#b9d1b1 !important; }
+.gl-home .gl-secondary { width:100%; border:1px solid #514658; color:#eee8f5; background:#252030; padding:10px 16px; }
+.gl-facts { margin:28px 0; border-top:1px solid #393343; }
+.gl-facts div { padding:14px 0; border-bottom:1px solid #393343; }
+.gl-facts dt { color:#b1a9c4; font-size:11px; letter-spacing:.12em; text-transform:uppercase; }
+.gl-facts dd { margin:4px 0 0; font-size:14px; overflow-wrap:anywhere; }
+.gl-home-footer { color:#b1a9c4; font-size:12px; margin-top:28px; }
+.gl-home a { color:#f2c169; }
+.gl-home ul { padding-left:20px; color:#c0b9cc; font-size:14px; }
+.gl-home label { color:#eee8f5; }
+.gl-setting { display:block; margin:18px 0; }
+.gl-setting span { display:flex; justify-content:space-between; gap:12px; margin-bottom:10px; }
+.gl-setting input[type="range"] { width:100%; min-height:36px; accent-color:#b67b25; cursor:pointer; }
+.gl-header { position:fixed; top:0; left:0; right:0; height:var(--gl-top); z-index:80; padding:0 24px; display:flex; align-items:center; gap:20px; background:#211c2b; color:#eee9f4; border-bottom:1px solid #393343; }
+.gl-header strong { letter-spacing:.18em; font-size:14px; }
+.gl-header small { color:#bbb3c9; }
+.gl-header button { margin-left:auto; border:0; background:transparent; color:#eac27f; padding:0 10px; }
+.gl-dock { position:fixed; bottom:0; left:0; right:0; height:var(--gl-bottom); z-index:80; display:flex; justify-content:center; gap:8px; align-items:center; padding:6px 16px max(6px,env(safe-area-inset-bottom)); background:var(--gl-paper); border-top:1px solid var(--gl-line); }
+.gl-dock button { min-width:88px; padding:4px 14px; color:var(--gl-ink); background:transparent; border:1px solid transparent; display:flex; align-items:center; justify-content:center; gap:8px; }
+.gl-dock button:hover, .gl-dock button[aria-pressed="true"] { background:#e9e2d5; border-color:#d4c1a1; }
+.gl-dock svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.gl-dialog { width:min(560px,calc(100vw - 24px)); max-height:calc(100dvh - 32px); overflow:auto; border:1px solid var(--gl-line); border-radius:18px; padding:24px; background:var(--gl-paper); color:var(--gl-ink); }
+.gl-dialog, .gl-dialog *, .gl-home, .gl-home * { pointer-events:auto; }
+.gl-dialog::backdrop { background:#15111bb3; }
+.gl-dialog h2 { font-size:24px; margin:0 0 8px; }
+.gl-dialog p { color:var(--gl-muted); font-size:14px; }
+.gl-dialog header { display:flex; justify-content:space-between; align-items:start; gap:12px; }
+.gl-dialog button { background:var(--gl-panel); color:var(--gl-ink); border:1px solid var(--gl-line); padding:8px 14px; }
+.gl-dialog nav { display:flex; flex-wrap:wrap; gap:8px; margin:20px 0; }
+.gl-dialog details { border-top:1px solid var(--gl-line); margin-top:20px; padding-top:14px; }
+.gl-dialog summary { cursor:pointer; min-height:44px; }
+.gl-dialog textarea { display:block; box-sizing:border-box; width:100%; height:150px; padding:10px; font:12px/1.5 monospace; border:1px solid var(--gl-line); background:#fff; color:#292735; border-radius:8px; }
+.gl-toast { position:fixed; z-index:5000; bottom:calc(var(--gl-bottom) + 12px); left:50%; transform:translateX(-50%); max-width:calc(100vw - 32px); padding:12px 18px; border-radius:10px; background:#211c2b; color:white; box-shadow:0 4px 18px #0003; }
+/* Keep the game, actions and engine-owned panels intact; only restyle/reflow. */
+html[data-gl-shell] qsp-game-root, html[data-gl-shell] #portal-container {
+  --background-color:var(--gl-paper); --color:var(--gl-ink); --link-color:#52687a;
+  --background-color-contrast:var(--gl-line); --background-color-inverted:#e6ded0;
+  --background-color-inverted-contrast:#282332; --border-color:var(--gl-line);
+  font-family:system-ui,-apple-system,sans-serif;
+}
+html[data-gl-shell] #portal-container { position:relative; z-index:3000; }
+html[data-gl-shell] qsp-player { background:var(--gl-panel); }
+html[data-gl-shell] .mobile-panel-control { display:none !important; }
+html[data-gl-shell] qsp-main-content { font:var(--gl-text)/1.65 system-ui,-apple-system,sans-serif; padding:24px; }
+html[data-gl-shell] qsp-main-content h1 { font-size:clamp(25px,4vw,36px); }
+html[data-gl-shell] qsp-main-content img, html[data-gl-shell] qsp-main-content video { max-height:var(--gl-picture); max-width:100%; object-fit:contain; }
+html[data-gl-shell] qsp-player .action-item { border-bottom:1px solid var(--gl-line); padding:12px 16px; min-height:48px; font:16px/1.5 system-ui,sans-serif; background:var(--gl-paper); color:var(--gl-ink); }
+html[data-gl-shell] qsp-player .action-item:hover { background:#ebe3d5; color:#292735; }
+html[data-gl-shell] qsp-player .action-item:focus-visible { outline:3px solid #95631d; outline-offset:-3px; }
+html[data-gl-shell] qsp-main > .panel-background { padding-top:0 !important; }
+html[data-gl-shell] .panel { border-color:var(--gl-line); }
+html[data-gl-shell] .aero-theme .main-block { background-image:none; }
+html[data-gl-shell] .aero-theme qsp-view { position:fixed; inset:0; width:100vw; height:100dvh; z-index:2000; display:flex; align-items:center; justify-content:center; background:rgb(0 0 0 / 78%); }
+html[data-gl-shell] .aero-theme qsp-view img, html[data-gl-shell] .aero-theme qsp-view video { max-width:calc(100vw - 32px); max-height:88dvh; width:auto; height:auto; object-fit:contain; }
+html[data-gl-shell] .cloud-account-dialog { box-sizing:border-box; max-height:calc(100dvh - 24px); overflow:auto; background:#faf8f3; color:#292735; border:1px solid #d9d3c9; border-radius:18px; padding:24px; }
+html[data-gl-shell] .cloud-account-dialog input { border:1px solid #bbb4a9; border-radius:8px; background:#fff; color:#292735; }
+html[data-gl-shell] .cloud-account-actions button { border:1px solid #c6bdaE; border-radius:8px; background:#f1eee8; color:#292735; }
+html[data-gl-shell] .cloud-account-dialog[data-intent="register"] button[value="create"] { background:#e8b75f; color:#211a2b; border-color:#b38336; }
+@media(min-width:901px) {
+  html[data-gl-shell] qsp-main { position:fixed !important; left:24px; right:360px; top:calc(var(--gl-top) + 20px); bottom:calc(var(--gl-bottom) + 20px); width:auto !important; height:auto !important; background:var(--gl-paper); border:1px solid var(--gl-line); border-radius:12px; overflow:hidden; }
+  html[data-gl-shell] qsp-actions { position:fixed !important; left:auto; right:24px; top:calc(var(--gl-top) + 20px); bottom:calc(var(--gl-bottom) + 20px); width:312px !important; height:auto !important; background:var(--gl-paper); border:1px solid var(--gl-line); border-radius:12px; overflow:hidden; }
+  html[data-gl-shell] qsp-cl-pane:has(> qsp-stats), html[data-gl-shell] qsp-cl-pane:has(> qsp-objects) { display:none !important; }
+  html[data-gl-shell] qsp-player:has([data-mobile-panel="stats"][aria-pressed="true"]) qsp-cl-pane:has(> qsp-stats), html[data-gl-shell] qsp-player:has([data-mobile-panel="objects"][aria-pressed="true"]) qsp-cl-pane:has(> qsp-objects) { display:block !important; }
+  html[data-gl-shell] qsp-stats, html[data-gl-shell] qsp-objects { display:none !important; }
+  html[data-gl-shell] qsp-player:has([data-mobile-panel="stats"][aria-pressed="true"]) qsp-stats, html[data-gl-shell] qsp-player:has([data-mobile-panel="objects"][aria-pressed="true"]) qsp-objects { display:block !important; position:fixed !important; z-index:1000; left:auto; right:24px; top:calc(var(--gl-top) + 20px); bottom:calc(var(--gl-bottom) + 20px); width:312px !important; height:auto !important; background:var(--gl-paper); padding:12px; border:1px solid var(--gl-line); border-radius:12px; overflow:auto; box-shadow:0 8px 30px #211c2b22; }
+}
+@media(max-width:900px) {
+  :root[data-gl-shell] { --gl-top:48px; --gl-bottom:calc(64px + env(safe-area-inset-bottom)); }
+  .gl-home { display:block; }
+  .gl-art { display:none; }
+  .gl-home-panel { min-height:100dvh; padding:28px 22px; }
+  .gl-play-block { padding-top:40px; }
+  .gl-wordmark { font-size:28px; }
+  .gl-header { padding:0 14px; gap:10px; }
+  .gl-header small { display:none; }
+  .gl-dock { gap:0; padding-inline:6px; }
+  .gl-dock button { flex:1; min-width:0; flex-direction:column; gap:2px; padding:3px; font-size:11px; border-radius:8px; }
+  html[data-gl-shell] qsp-cl { position:fixed; top:var(--gl-top); left:0; width:100vw; height:var(--gl-stage) !important; }
+  html[data-gl-shell] qsp-cl-layer:has(> qsp-cl-dock[data-place="bottom"] qsp-cl-pane > qsp-actions) { grid-template-rows:minmax(0,calc((100% - 4px) * var(--gl-main-share) / 100)) minmax(0,1fr) !important; }
+  html[data-gl-shell] qsp-main-content { padding:16px; font-size:var(--gl-text) !important; }
+  html[data-gl-shell] qsp-stats-content, html[data-gl-shell] qsp-objects-list { font-size:16px; }
+  html[data-gl-shell] qsp-actions .panel-background { padding-bottom:0 !important; }
+  html[data-gl-shell] .aero-theme qsp-stats, html[data-gl-shell] .aero-theme qsp-objects {
+    position:fixed !important; width:auto !important; height:auto !important;
+  }
+  html[data-gl-shell] qsp-player:has([data-mobile-panel="objects"][aria-pressed="true"]) qsp-cl-dock[data-place="right"],
+  html[data-gl-shell] .aero-theme:has([data-mobile-panel="objects"][aria-pressed="true"]) qsp-objects {
+    top:var(--gl-top); bottom:calc(var(--gl-bottom) + var(--gl-stage) * (100 - var(--gl-main-share)) / 100); left:0; right:0; padding:12px !important;
+  }
+  html[data-gl-shell] qsp-player:has([data-mobile-panel="stats"][aria-pressed="true"]) qsp-cl-pane:has(> qsp-stats),
+  html[data-gl-shell] .aero-theme:has([data-mobile-panel="stats"][aria-pressed="true"]) qsp-stats {
+    top:calc(var(--gl-top) + var(--gl-stage) * var(--gl-main-share) / 100); bottom:var(--gl-bottom); left:0; right:0; padding:12px !important;
+  }
+  html[data-gl-shell] .aero-theme .main-block { position:fixed; top:var(--gl-top); height:var(--gl-stage); min-height:var(--gl-stage); max-height:var(--gl-stage); }
+  html[data-gl-shell] .aero-theme qsp-main { height:calc(var(--gl-stage) * var(--gl-main-share) / 100) !important; padding-top:0 !important; }
+  html[data-gl-shell] .aero-theme qsp-actions { top:calc(var(--gl-stage) * var(--gl-main-share) / 100) !important; height:calc(var(--gl-stage) * (100 - var(--gl-main-share)) / 100) !important; padding-bottom:0 !important; }
+}
+@media(prefers-reduced-motion:reduce) { .gl-home *, .gl-dialog *, .gl-dock * { scroll-behavior:auto; transition:none !important; } }
+'''
+
+BROWSER_UI_JS = r'''(() => {
+  if (document.documentElement.hasAttribute("data-gl-shell")) return;
+  const root = document.documentElement;
+  root.setAttribute("data-gl-shell", "cloud-22");
+  const storageKey = "girllife.browser.interface.v1";
+  const defaults = {text:18, picture:48, share:70};
+  const bounds = {text:[16,24], picture:[24,64], share:[55,80]};
+  const validate = value => Object.fromEntries(Object.keys(defaults).map(key => {
+    const number = Number(value && value[key]);
+    return [key, Number.isFinite(number) ? Math.min(bounds[key][1], Math.max(bounds[key][0], number)) : defaults[key]];
+  }));
+  let settings = {...defaults};
+  try { const stored = localStorage.getItem(storageKey); if (stored) settings = validate(JSON.parse(stored)); } catch (_) {}
+  let ready = false, entered = false, toastTimer;
+  const icon = (paths) => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`;
+  const icons = {
+    home:icon('<path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-8h6v8"/>'),
+    objects:icon('<path d="M5 7h14l2 14H3Z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/>'),
+    stats:icon('<path d="M4 20V11m8 9V4m8 16v-6"/>'),
+    saves:icon('<path d="M4 3h13l3 3v15H4Z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/>'),
+    menu:icon('<path d="M4 6h16M4 12h16M4 18h16"/>')
+  };
+  const settingsMarkup = () => `<label class="gl-setting"><span>Story text <output data-value="text"></output></span><input data-setting="text" aria-label="Story text size" type="range" min="16" max="24" step="1"></label>
+    <label class="gl-setting"><span>Picture height <output data-value="picture"></output></span><input data-setting="picture" aria-label="Maximum picture height" type="range" min="24" max="64" step="4"></label>
+    <label class="gl-setting"><span>Story / actions <output data-value="share"></output></span><input data-setting="share" aria-label="Mobile story height percentage" type="range" min="55" max="80" step="5"></label>
+    <p>Changes apply immediately and stay on this browser, not in your save. Story/actions sizing applies on phones.</p>`;
+  const home = document.createElement("section");
+  home.className = "gl-home";
+  home.setAttribute("aria-label", "Girl Life launcher");
+  home.innerHTML = `<div class="gl-art" aria-hidden="true">
+    <svg viewBox="0 0 700 500" fill="none"><circle cx="180" cy="100" r="45" stroke="currentColor" opacity=".4"/><path d="M0 320H700M0 350H700M0 395H700M0 455H700" stroke="currentColor" opacity=".18"/><path d="M0 300h70v-80h45v-90h35v90h50v80h40V190h60v-60h30v60h60v110h35V150h45V95h12v55h45v150h40v-80h85v80h48" stroke="currentColor" stroke-width="2"/><path d="M0 335Q175 220 350 335T700 335" stroke="currentColor" stroke-width="3"/><path d="M0 340h700" stroke="currentColor" stroke-width="2"/></svg>
+    <div class="gl-art-caption"><span>A life of your own</span><h2>A city of stories.<br>A choice at every turn.</h2></div></div>
+    <div class="gl-home-panel"><h1 class="gl-wordmark">GIRL <strong>LIFE</strong></h1><p class="gl-eyebrow">English Community Version · Browser edition</p>
+      <div class="gl-tabs" role="tablist" aria-label="Launcher pages">
+        <button id="gl-tab-play" role="tab" aria-controls="gl-page-play" aria-selected="true" data-tab="play">Play</button>
+        <button id="gl-tab-settings" role="tab" aria-controls="gl-page-settings" aria-selected="false" tabindex="-1" data-tab="settings">Settings</button>
+        <button id="gl-tab-help" role="tab" aria-controls="gl-page-help" aria-selected="false" tabindex="-1" data-tab="help">Help</button>
+      </div>
+      <section class="gl-tabpanel" id="gl-page-play" role="tabpanel" aria-labelledby="gl-tab-play">
+        <div class="gl-play-block"><button class="gl-primary" data-command="play" disabled>Preparing game…</button><p class="gl-readiness" role="status">Loading the original QSP game. Download progress appears above.</p><button class="gl-secondary" data-command="saves" disabled>Load a cloud save</button></div>
+        <dl class="gl-facts"><div><dt>Game</dt><dd data-game-title>Reading game information…</dd></div><div><dt>Story language</dt><dd>English · original game file</dd></div><div><dt>Saves</dt><dd>Cloud account required · sign in when you load or save</dd></div></dl>
+        <p>This launcher is for adults aged 18 and over. Play opens the game currently loaded in this tab; it does not start a new character or load a save automatically.</p>
+      </section>
+      <section class="gl-tabpanel" id="gl-page-settings" role="tabpanel" aria-labelledby="gl-tab-settings" hidden><h2>Make room for your story</h2>${settingsMarkup()}<button class="gl-secondary" data-command="reset">Reset interface</button></section>
+      <section class="gl-tabpanel" id="gl-page-help" role="tabpanel" aria-labelledby="gl-tab-help" hidden><h2>Everything in one place</h2><ul><li>Play opens the game. Use its Start action for a new character.</li><li>Items and Stats open the game's own panels; select again to close.</li><li>Saves opens the existing cloud-save panel after sign-in.</li><li>Home returns here without restarting or saving the game.</li></ul><p>Keep a separate copy of important saves. Physical-phone and Windows testing is not complete.</p><button class="gl-secondary" data-command="diagnostics">View diagnostic report</button><p><a href="https://github.com/samttoo22-MewCat/GirlLife2HTML" target="_blank" rel="noopener noreferrer">Project & documentation</a></p></section>
+      <footer class="gl-home-footer">GirlLife2HTML · cloud-22 · Powered by qSpider<br>Unofficial interface · no game-content rewrite</footer>
+    </div>`;
+  const header = document.createElement("header");
+  header.className = "gl-header"; header.hidden = true;
+  header.innerHTML = '<strong>GIRL LIFE</strong><small>Browser edition</small><button data-command="interface">Interface</button>';
+  const dock = document.createElement("nav");
+  dock.className = "gl-dock"; dock.hidden = true; dock.setAttribute("aria-label", "Game tools");
+  dock.innerHTML = [ ["home","Home"],["objects","Items"],["stats","Stats"],["saves","Saves"],["menu","Menu"] ].map(([key,label]) => `<button data-command="${key}" ${key === "objects" || key === "stats" ? 'aria-pressed="false"' : ''}>${icons[key]}<span>${label}</span></button>`).join("");
+  const dialog = document.createElement("dialog"); dialog.className = "gl-dialog";
+  dialog.setAttribute("aria-labelledby", "gl-dialog-title");
+  dialog.innerHTML = `<header><h2 id="gl-dialog-title">Your interface</h2><button data-command="close" aria-label="Close interface settings">Close</button></header>
+    <nav aria-label="More game tools"><button data-command="account">Cloud account</button><button data-command="native-menu">Game preferences</button><button data-command="home">Home</button></nav>
+    ${settingsMarkup()}<button data-command="reset">Reset interface</button>
+    <p>Reset changes only these display preferences, not your character, progress, cloud account or game variables.</p>
+    <details><summary>Help & diagnostics</summary><p>No report is sent automatically. The report contains display/engine readiness information only: no story, account name, token or save content.</p><textarea readonly aria-label="Diagnostic report"></textarea><button data-command="copy">Copy report</button><p data-copy-status role="status"></p></details>`;
+  const toast = document.createElement("div"); toast.className = "gl-toast"; toast.hidden = true; toast.setAttribute("role", "status");
+  document.body.append(home, header, dock, dialog, toast);
+  window.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || !dialog.open) return;
+    event.preventDefault(); event.stopImmediatePropagation(); dialog.close();
+  }, true);
+  function notify(message) { clearTimeout(toastTimer); toast.textContent = message; toast.hidden = false; toastTimer = setTimeout(() => { toast.hidden = true; }, 3500); }
+  function applySettings(persist = false) {
+    root.style.setProperty("--gl-text", settings.text + "px");
+    root.style.setProperty("--gl-picture", settings.picture + "dvh");
+    root.style.setProperty("--gl-main-share", String(settings.share));
+    document.querySelectorAll("[data-setting]").forEach(input => { input.value = settings[input.dataset.setting]; });
+    document.querySelectorAll("[data-value]").forEach(out => { const key = out.dataset.value; out.textContent = key === "text" ? settings.text + "px" : key === "picture" ? settings.picture + "% of screen" : settings.share + "% / " + (100-settings.share) + "%"; });
+    if (persist) { try { localStorage.setItem(storageKey, JSON.stringify(settings)); } catch (_) { notify("Browser storage is unavailable; settings last for this tab only."); } }
+  }
+  function setHome(open) {
+    home.hidden = !open; header.hidden = open; dock.hidden = open;
+    const game = document.querySelector("qsp-game-root"); if (game) game.inert = open;
+    if (open) home.querySelector('[role="tab"][aria-selected="true"]').focus();
+    else header.querySelector("button").focus();
+  }
+  function report() {
+    return JSON.stringify({interface:"cloud-22", viewport:[innerWidth,innerHeight], theme:document.querySelector(".aero-theme") ? "aero" : "classic", engineReady:ready, display:settings, panels:{items:!!document.querySelector("qsp-objects"),stats:!!document.querySelector("qsp-stats")}}, null, 2);
+  }
+  async function engine(command) {
+    if (!ready || typeof window.girllifeBrowserCommand !== "function") { notify("The game is still loading. Please wait."); return; }
+    await window.girllifeBrowserCommand(command);
+  }
+  function openInterface(diagnostics = false) {
+    dialog.querySelector("textarea").value = report();
+    dialog.querySelector("details").open = diagnostics;
+    dialog.querySelector("[data-copy-status]").textContent = "";
+    if (!dialog.open) dialog.showModal();
+  }
+  function selectTab(name, focus = false) {
+    home.querySelectorAll("[data-tab]").forEach(tab => { const active = tab.dataset.tab === name; tab.setAttribute("aria-selected", String(active)); tab.tabIndex = active ? 0 : -1; if (active && focus) tab.focus(); });
+    home.querySelectorAll('[role="tabpanel"]').forEach(panel => { panel.hidden = panel.id !== "gl-page-" + name; });
+  }
+  home.querySelector('[role="tablist"]').addEventListener("keydown", event => {
+    const tabs = [...home.querySelectorAll("[data-tab]")]; let index = tabs.indexOf(event.target);
+    if (index < 0 || !["ArrowLeft","ArrowRight","Home","End"].includes(event.key)) return;
+    event.preventDefault(); index = event.key === "Home" ? 0 : event.key === "End" ? tabs.length-1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    selectTab(tabs[index].dataset.tab, true);
+  });
+  [home, dialog, dock, header].forEach(element => {
+    for (const type of ["keydown", "keyup", "keypress"]) element.addEventListener(type, event => event.stopPropagation());
+    element.addEventListener("input", event => { const key = event.target.dataset.setting; if (!Object.hasOwn(defaults,key)) return; settings = validate({...settings,[key]:event.target.value}); applySettings(true); });
+    element.addEventListener("click", async event => {
+      const tab = event.target.closest("[data-tab]"); if (tab) { selectTab(tab.dataset.tab); return; }
+      const button = event.target.closest("[data-command]"); if (!button || button.disabled) return;
+      const command = button.dataset.command;
+      if (command === "play") { entered = true; setHome(false); return; }
+      if (command === "reset") { settings = {...defaults}; applySettings(true); notify("Interface reset. Your game and saves are unchanged."); return; }
+      if (command === "interface" || command === "menu" || command === "diagnostics") { openInterface(command === "diagnostics"); return; }
+      if (command === "close") { dialog.close(); return; }
+      if (command === "copy") { const text = report(); dialog.querySelector("textarea").value = text; try { await navigator.clipboard.writeText(text); dialog.querySelector("[data-copy-status]").textContent = "Report copied. Share it only if you choose."; } catch (_) { dialog.querySelector("textarea").select(); dialog.querySelector("[data-copy-status]").textContent = "Copy is unavailable. Select and copy the report above."; } return; }
+      if (command === "objects" || command === "stats") {
+        const control = document.querySelector('qsp-player [data-mobile-panel="' + command + '"]');
+        if (!document.querySelector(command === "objects" ? "qsp-objects" : "qsp-stats")) { notify("This panel is not available on the current game screen."); return; }
+        if (control) control.click(); syncPanels(); return;
+      }
+      if (dialog.open) dialog.close();
+      try {
+        if (command === "home") { await engine("resume"); setHome(true); notify("Game stays open in this tab. Returning home does not save it."); }
+        else { setHome(false); entered = true; await engine(command === "native-menu" ? "menu" : command); }
+      } catch (_) { notify("Could not open this panel. Return to the game and try again."); }
+    });
+  });
+  function syncPanels() {
+    for (const key of ["objects","stats"]) {
+      const native = document.querySelector('qsp-player [data-mobile-panel="' + key + '"]');
+      const selected = native && native.getAttribute("aria-pressed") === "true";
+      const button = dock.querySelector('[data-command="' + key + '"]');
+      if (button.getAttribute("aria-pressed") !== String(!!selected)) button.setAttribute("aria-pressed", String(!!selected));
+    }
+  }
+  function sync() {
+    ready = ready || (!!document.querySelector('qsp-main-content') && !!document.querySelector('[data-qsp="action"]') && typeof window.girllifeBrowserCommand === "function");
+    const play = home.querySelector('[data-command="play"]');
+    const label = ready ? (entered ? "Return to game" : "Play") : "Preparing game…";
+    if (play.textContent !== label) play.textContent = label;
+    play.disabled = !ready; home.querySelector('[data-command="saves"]').disabled = !ready;
+    const title = home.querySelector("[data-game-title]"); const name = document.title === "qSpider" ? "Original English QSP" : document.title;
+    if (title.textContent !== name) title.textContent = name;
+    const status = home.querySelector(".gl-readiness"); const message = ready ? "Ready to play · original QSP engine" : "Loading the original QSP game. Download progress appears above.";
+    if (status.textContent !== message) status.textContent = message;
+    const game = document.querySelector("qsp-game-root"); if (game && game.inert !== !home.hidden) game.inert = !home.hidden;
+    syncPanels();
+  }
+  let pending = false;
+  new MutationObserver(() => { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; sync(); }); } }).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:["aria-pressed"]});
+  applySettings(); sync();
+})();
 '''
 
 MOBILE_LAYOUT_CSS = """
@@ -1282,11 +1612,10 @@ def apply_cloud_saves(output: Path) -> None:
     markup = index.read_text(encoding="utf-8")
     original_markup = markup
     script = f'<script src="./cloud-saves-ui.js?v={CLOUD_SAVE_CACHE_VERSION}" defer></script>'
-    if CLOUD_SAVE_CACHE_VERSION not in markup:
-        pattern = r'(<script type="module" crossorigin src="[^"]+?\.js)(?:\?v=[^"]*)?(">)'
-        if len(re.findall(pattern, markup)) != 1:
-            raise RuntimeError("Could not refresh the cached qSpider player bundle URL.")
-        markup = re.sub(pattern, rf'\1?v={CLOUD_SAVE_CACHE_VERSION}\2', markup, count=1)
+    pattern = r'(<script type="module" crossorigin src="[^"]+?\.js)(?:\?v=[^"]*)?(">)'
+    if len(re.findall(pattern, markup)) != 1:
+        raise RuntimeError("Could not refresh the cached qSpider player bundle URL.")
+    markup = re.sub(pattern, rf'\1?v={CLOUD_SAVE_CACHE_VERSION}\2', markup, count=1)
     if script not in markup:
         ui_pattern = r'<script src="\./cloud-saves-ui\.js(?:\?v=[^"]*)?" defer></script>'
         if re.search(ui_pattern, markup):
@@ -1311,6 +1640,23 @@ def apply_cloud_saves(output: Path) -> None:
     ui = output / "cloud-saves-ui.js"
     if not ui.is_file() or ui.read_text(encoding="utf-8") != CLOUD_SAVE_UI_JS:
         write_file(ui, CLOUD_SAVE_UI_JS)
+
+    write_file(output / "browser-ui.css", BROWSER_UI_CSS)
+    write_file(output / "browser-ui.js", BROWSER_UI_JS)
+    markup = index.read_text(encoding="utf-8")
+    for tag, pattern in (
+        (f'<link rel="stylesheet" href="./browser-ui.css?v={CLOUD_SAVE_CACHE_VERSION}">',
+         r'<link rel="stylesheet" href="\./browser-ui\.css(?:\?v=[^"]*)?">'),
+        (f'<script src="./browser-ui.js?v={CLOUD_SAVE_CACHE_VERSION}" defer></script>',
+         r'<script src="\./browser-ui\.js(?:\?v=[^"]*)?" defer></script>'),
+    ):
+        if re.search(pattern, markup):
+            markup = re.sub(pattern, lambda _: tag, markup, count=1)
+        elif markup.count("</head>") == 1:
+            markup = markup.replace("</head>", f"    {tag}\n  </head>", 1)
+        else:
+            raise RuntimeError("Could not install the browser interface in the player page.")
+    index.write_text(markup, encoding="utf-8")
 
     for theme_name in ("aero.html", "classic.html"):
         theme = output / "themes" / theme_name

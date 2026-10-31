@@ -8,10 +8,12 @@ Build and run a browser-playable package of the original English Girl Life QSP g
 
 ## Contents
 
+- [Original game and community](#original-game-and-community)
 - [Screenshots](#screenshots)
 - [Requirements](#requirements)
 - [Folder layout](#folder-layout)
 - [Build and run](#build-and-run)
+- [Browser launcher](#browser-launcher)
 - [Loading and mobile interface](#loading-and-mobile-interface)
 - [Validation status](#validation-status)
 - [Cloud saves](#cloud-saves)
@@ -20,20 +22,37 @@ Build and run a browser-playable package of the original English Girl Life QSP g
 - [Scope and limitations](#scope-and-limitations)
 - [License](#license)
 
+## Original game and community
+
+This is an **unofficial HTML builder**, not the original Girl Life project.
+
+- [Girl Life — English Community Version: original release page](https://tfgames.site/game/597/girl-life-english-community-version)
+- [Upstream source code: Kevin Smarts / Girl Life](https://gitlab.com/kevinsmartstfg/girl-life)
+- [Girl Life community wiki](https://sites.google.com/view/girllifewiki)
+- Obtain matching media packs through the original release/community instructions; no game or media pack is bundled in this repository.
+
+> Public source code and free downloads do not by themselves grant permission to translate, redistribute, or host every game asset. Confirm the relevant permissions separately; the player's license does not license the game's text or media.
+
 ## Screenshots
 
-- **Source:** live cloud-21 site, captured on 2026-11-01.
+- **Source:** local cloud-22 test package, captured on 2026-11-01.
 - **Mobile:** simulated 390×844 touch viewport, not a physical phone.
-- **Account dialog:** shared registration/sign-in screen, with no credentials entered; background game images are hidden in this screenshot.
+- **Account dialog:** shared registration/sign-in screen, with no credentials entered.
 - **Credits:** game content belongs to its respective creators.
 
-### Mobile interface and account dialog
+### Launcher and interface settings
 
-<img src="docs/screenshots/mobile-interface.png" alt="Mobile interface with scrollable character-creation table and Items/Stats controls" width="300"> <img src="docs/screenshots/account-interface.png" alt="Cloud account registration and sign-in dialog" width="300">
+![Desktop launcher](docs/screenshots/launcher-desktop.png)
+
+<img src="docs/screenshots/launcher-mobile.png" alt="Mobile Play, Settings and Help launcher" width="280"> <img src="docs/screenshots/interface-settings.png" alt="Immediate display settings with reset" width="280">
+
+### Gameplay and cloud account
+
+<img src="docs/screenshots/game-mobile.png" alt="Mobile full-width story and actions with bottom tools" width="280"> <img src="docs/screenshots/cloud-account.png" alt="Cloud account registration and sign-in dialog" width="280">
 
 ### Desktop website
 
-![Desktop website at 1440×1000](docs/screenshots/website-interface.png)
+![Desktop gameplay at 1440×1000](docs/screenshots/game-desktop.png)
 
 ## Requirements
 
@@ -113,6 +132,26 @@ PowerShell is included with supported Windows versions. **Windows execution rema
 
 If a valid output folder already exists, it is preserved: the builder audits and serves it instead of overwriting it.
 
+## Browser launcher
+
+The original QSP engine still runs the game. The new shell changes presentation, not story or game logic.
+
+| Control | What it does |
+| --- | --- |
+| Play | Opens the loaded game; use the game's Start action for a new character. |
+| Load a cloud save / Saves | Opens the existing account-gated cloud-save panel. |
+| Settings / Interface | Immediately adjusts story text (16–24px), picture height (24–64% of screen), and mobile story/actions split (55/45–80/20). |
+| Reset interface | Restores 18px / 48% / 70–30; does not clear saves, accounts, or game variables. |
+| Home | Returns to the launcher without restarting, loading, or saving. **Progress remains in this tab only; reloading still loses unsaved play.** |
+| Items / Stats | Toggles mutually exclusive engine-owned panels. |
+| Menu | Opens display settings, cloud account, native game preferences, and help/diagnostics. |
+
+- Display settings stay in this browser under `girllife.browser.interface.v1`; they are not part of a cloud save.
+- Desktop uses story/actions columns; mobile uses full-width stacked panes and a bottom toolbar.
+- Diagnostic reports are displayed locally and copied only on request. No report is sent automatically; account names, tokens, and story/save contents are excluded.
+- The city SVG and shell code are original. Only the design/workflow concepts were inspired by [Girl Life Launcher](https://github.com/glife-launcher/GLreleases/releases).
+- See [workflow research and test instructions](docs/launcher-workflows.md) for adopted ideas and deferred features.
+
 ## Loading and mobile interface
 
 ### Loading performance
@@ -128,10 +167,10 @@ Applies to **Classic and Aero at widths up to 900 CSS px**.
 
 | Element | Behavior |
 | --- | --- |
-| Main / actions | Full-width panes with a 70% / 30% vertical split. |
-| Main text viewport | Approximately 60% of screen height after reserving space for the Items control; varies with viewport size. |
-| Items | Upper-right toggle; opens an overlay in the main-pane area. |
-| Stats | Lower-right toggle; opens an overlay in the actions-pane area. |
+| Main / actions | Full-width panes; default 70% / 30% of space between header and toolbar. |
+| Main text viewport | Scrollable inside the story pane; no reserved Items-button strip. |
+| Items | Bottom toolbar; opens an overlay in the main-pane area. |
+| Stats | Bottom toolbar; opens an overlay in the actions-pane area. |
 | Side panels | Only one can be open at a time. |
 | Content and actions | Independently scrollable, with touch-sized controls. |
 | Creation tables | Preserve horizontal columns; scroll sideways on narrow screens. |
@@ -140,26 +179,26 @@ Applies to **Classic and Aero at widths up to 900 CSS px**.
 
 ## Validation status
 
-**Last deployment verification: 2026-10-30.** This is a recorded result, not a continuous uptime check.
+**Last deployment verification: 2026-11-01 (Asia/Taipei).** This is a recorded result, not a continuous uptime check.
 
 | Check | Recorded result |
 | --- | --- |
-| Live version | **cloud-21** at `https://girllife.mewcat.me/` |
-| Source | Builder/docs on GitHub `main`; layout fix `0ac3645` |
+| Live version | **cloud-22** at `https://girllife.mewcat.me/` |
+| Source | Browser shell, tests, and bilingual docs in this repository |
 | Service | Restarted; `active` |
 | Homepage | HTTP 200 |
-| Deployed frontend files | All four SHA-256 hashes matched local files |
+| Deployed frontend files | All nine public SHA-256 hashes matched local files |
 
-### Latest fix: full-width gameplay
+Public smoke checks also passed: launcher → Play, account-required Saves → Cancel, immediate settings → Escape, Home, and desktop columns. Production API calls were blocked in that isolated browser test; no production account or save was created.
 
-- **Cause:** mounting inventory added a 215px right grid track in Classic. Hiding the inventory pane alone left that space reserved.
-- **Fix:** cloud-21 collapses that track; main/actions use the full width while Items still opens as an overlay. The 70/30 vertical split is unchanged.
-- **Local verification:** reached the cottage and guest room with inventory mounted at **320×568, 390×844, and 430×932**, with no page overflow.
+### cloud-22 local checks
 
-- Public-site validation reached the grandparents' cottage with inventory mounted: at a 390px viewport, the main pane measures the full 390px and the right grid track is 0px. Local Items overlay opening/closing was also checked.
-- Earlier prologue-only checks missed the inventory-triggered grid change; changing the vertical split did not fix the reported blank area on the right.
-- These checks do not verify the exact Pavlovsk bedroom shown in the user's screenshot, every inventory interaction, or all gameplay paths. Physical Android/iPhone/Safari and Windows execution remain unverified.
-- This update changed only frontend layout files; the original QSP/media and production accounts, saves, and database content were not modified.
+- Original QSP gameplay with inventory mounted, not just a title-screen fixture.
+- Classic and Aero: **320×568, 390×844, 430×932, 768×1024, 901×700, 1440×1000** geometry and panel switching.
+- Keyboard tabs, settings persistence/reset, horizontal creation tables, Home preserving the current scene, media inside/outside taps, native preferences, and Escape isolation.
+- Registration, save/load, and sign-out against a **throwaway local database**, never production accounts. One exploratory Aero run received a storage HTTP 503; the rerun passed. This UI change does not claim to fix intermittent backend storage errors.
+- Builder syntax, generated JavaScript syntax, cache refresh, and repeat-application tests.
+- Original QSP/media remain unchanged. These are browser-emulation checks, not physical-device acceptance.
 
 > **Still unverified:** physical Android/iPhone/Safari, Windows execution, the exact Pavlovsk bedroom from the report, all inventory interactions, and full gameplay coverage.
 
