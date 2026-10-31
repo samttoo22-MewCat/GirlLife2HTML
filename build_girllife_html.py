@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-22"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-23"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -720,8 +720,11 @@ WebStorage.prototype.clearSaveKey = async function(game, key) {
 BROWSER_UI_CSS = r'''
 /* GirlLife browser shell. Original artwork and code, not launcher assets. */
 :root[data-gl-shell] {
-  --gl-ink:#292735; --gl-muted:#625e70; --gl-paper:#faf8f3;
-  --gl-panel:#f1eee8; --gl-line:#d9d3c9; --gl-accent:#95631d;
+  --gl-ink:#292735; --gl-paper:#faf8f3; --gl-accent:#95631d;
+  --gl-muted:color-mix(in srgb,var(--gl-ink) 80%,var(--gl-paper));
+  --gl-panel:color-mix(in srgb,var(--gl-paper) 94%,var(--gl-ink));
+  --gl-line:color-mix(in srgb,var(--gl-paper) 75%,var(--gl-ink));
+  --gl-aside:clamp(340px,32vw,460px); --gl-side-height:calc(var(--gl-stage) - 40px);
   --gl-top:56px; --gl-bottom:64px; --gl-stage:calc(100dvh - var(--gl-top) - var(--gl-bottom));
   --gl-text:18px; --gl-picture:48dvh; --gl-main-share:70;
 }
@@ -751,7 +754,7 @@ BROWSER_UI_CSS = r'''
 .gl-wordmark strong { font-weight:750; }
 .gl-eyebrow { color:#b1a9c4; margin:8px 0 24px; }
 .gl-tabs { display:flex; gap:24px; border-bottom:1px solid #393343; }
-.gl-tabs button { border:0; border-radius:0; background:none; color:#aaa1bb; padding:10px 0; letter-spacing:.12em; font-size:12px; text-transform:uppercase; }
+.gl-tabs button { min-width:44px; border:0; border-radius:0; background:none; color:#aaa1bb; padding:10px 0; letter-spacing:.12em; font-size:12px; text-transform:uppercase; }
 .gl-tabs button[aria-selected="true"] { color:#fff; box-shadow:0 2px #e4ad51; }
 .gl-tabpanel { padding-top:28px; flex:1; }
 .gl-tabpanel h2 { font-size:22px; margin:0 0 10px; }
@@ -772,13 +775,13 @@ BROWSER_UI_CSS = r'''
 .gl-setting { display:block; margin:18px 0; }
 .gl-setting span { display:flex; justify-content:space-between; gap:12px; margin-bottom:10px; }
 .gl-setting input[type="range"] { width:100%; min-height:36px; accent-color:#b67b25; cursor:pointer; }
-.gl-header { position:fixed; top:0; left:0; right:0; height:var(--gl-top); z-index:80; padding:0 24px; display:flex; align-items:center; gap:20px; background:#211c2b; color:#eee9f4; border-bottom:1px solid #393343; }
+.gl-header { position:fixed; top:0; left:0; right:0; height:var(--gl-top); z-index:80; padding:0 24px; display:flex; align-items:center; gap:20px; background:var(--gl-paper); color:var(--gl-ink); border-bottom:1px solid var(--gl-line); }
 .gl-header strong { letter-spacing:.18em; font-size:14px; }
-.gl-header small { color:#bbb3c9; }
-.gl-header button { margin-left:auto; border:0; background:transparent; color:#eac27f; padding:0 10px; }
+.gl-header small { color:var(--gl-muted); }
+.gl-header button { margin-left:auto; border:0; background:transparent; color:var(--gl-accent); padding:0 10px; }
 .gl-dock { position:fixed; bottom:0; left:0; right:0; height:var(--gl-bottom); z-index:80; display:flex; justify-content:center; gap:8px; align-items:center; padding:6px 16px max(6px,env(safe-area-inset-bottom)); background:var(--gl-paper); border-top:1px solid var(--gl-line); }
 .gl-dock button { min-width:88px; padding:4px 14px; color:var(--gl-ink); background:transparent; border:1px solid transparent; display:flex; align-items:center; justify-content:center; gap:8px; }
-.gl-dock button:hover, .gl-dock button[aria-pressed="true"] { background:#e9e2d5; border-color:#d4c1a1; }
+.gl-dock button:hover, .gl-dock button[aria-pressed="true"] { background:var(--gl-panel); border-color:var(--gl-accent); }
 .gl-dock svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
 .gl-dialog { width:min(560px,calc(100vw - 24px)); max-height:calc(100dvh - 32px); overflow:auto; border:1px solid var(--gl-line); border-radius:18px; padding:24px; background:var(--gl-paper); color:var(--gl-ink); }
 .gl-dialog, .gl-dialog *, .gl-home, .gl-home * { pointer-events:auto; }
@@ -790,40 +793,42 @@ BROWSER_UI_CSS = r'''
 .gl-dialog nav { display:flex; flex-wrap:wrap; gap:8px; margin:20px 0; }
 .gl-dialog details { border-top:1px solid var(--gl-line); margin-top:20px; padding-top:14px; }
 .gl-dialog summary { cursor:pointer; min-height:44px; }
-.gl-dialog textarea { display:block; box-sizing:border-box; width:100%; height:150px; padding:10px; font:12px/1.5 monospace; border:1px solid var(--gl-line); background:#fff; color:#292735; border-radius:8px; }
+.gl-dialog textarea { display:block; box-sizing:border-box; width:100%; height:150px; padding:10px; font:12px/1.5 monospace; border:1px solid var(--gl-line); background:var(--gl-panel); color:var(--gl-ink); border-radius:8px; }
 .gl-toast { position:fixed; z-index:5000; bottom:calc(var(--gl-bottom) + 12px); left:50%; transform:translateX(-50%); max-width:calc(100vw - 32px); padding:12px 18px; border-radius:10px; background:#211c2b; color:white; box-shadow:0 4px 18px #0003; }
-/* Keep the game, actions and engine-owned panels intact; only restyle/reflow. */
-html[data-gl-shell] qsp-game-root, html[data-gl-shell] #portal-container {
-  --background-color:var(--gl-paper); --color:var(--gl-ink); --link-color:#52687a;
-  --background-color-contrast:var(--gl-line); --background-color-inverted:#e6ded0;
-  --background-color-inverted-contrast:#282332; --border-color:var(--gl-line);
-  font-family:system-ui,-apple-system,sans-serif;
-}
+/* Engine colors remain authoritative. Never override --color / --background-color:
+   they come from FCOLOR / BCOLOR / LCOLOR, including after restoring a save. */
 html[data-gl-shell] #portal-container { position:relative; z-index:3000; }
 html[data-gl-shell] qsp-player { background:var(--gl-panel); }
+html[data-gl-shell] qsp-main, html[data-gl-shell] qsp-actions, html[data-gl-shell] qsp-stats, html[data-gl-shell] qsp-objects { background-color:var(--background-color); color:var(--color); }
 html[data-gl-shell] .mobile-panel-control { display:none !important; }
 html[data-gl-shell] qsp-main-content { font:var(--gl-text)/1.65 system-ui,-apple-system,sans-serif; padding:24px; }
 html[data-gl-shell] qsp-main-content h1 { font-size:clamp(25px,4vw,36px); }
 html[data-gl-shell] qsp-main-content img, html[data-gl-shell] qsp-main-content video { max-height:var(--gl-picture); max-width:100%; object-fit:contain; }
-html[data-gl-shell] qsp-player .action-item { border-bottom:1px solid var(--gl-line); padding:12px 16px; min-height:48px; font:16px/1.5 system-ui,sans-serif; background:var(--gl-paper); color:var(--gl-ink); }
-html[data-gl-shell] qsp-player .action-item:hover { background:#ebe3d5; color:#292735; }
-html[data-gl-shell] qsp-player .action-item:focus-visible { outline:3px solid #95631d; outline-offset:-3px; }
+html[data-gl-shell] qsp-player .action-item { border-bottom:1px solid var(--gl-line); padding:12px 16px; min-height:48px; font:16px/1.5 system-ui,sans-serif; background:var(--background-color); color:var(--color); }
+html[data-gl-shell] qsp-player .action-item:hover { background:var(--background-color-inverted); color:var(--background-color-inverted-contrast); }
+html[data-gl-shell] qsp-player .action-item:focus-visible { outline:3px solid var(--link-color); outline-offset:-3px; }
 html[data-gl-shell] qsp-main > .panel-background { padding-top:0 !important; }
 html[data-gl-shell] .panel { border-color:var(--gl-line); }
+html[data-gl-shell] qsp-stats-content, html[data-gl-shell] qsp-objects-list { display:block; box-sizing:border-box; width:100%; min-width:0; max-width:100%; font-size:16px; line-height:1.5; }
+html[data-gl-shell] qsp-stats [data-radix-scroll-area-viewport], html[data-gl-shell] qsp-objects [data-radix-scroll-area-viewport] { overflow:auto !important; }
+html[data-gl-shell] qsp-stats [data-radix-scroll-area-viewport] > div, html[data-gl-shell] qsp-objects [data-radix-scroll-area-viewport] > div { display:block !important; box-sizing:border-box; width:100% !important; min-width:0 !important; }
 html[data-gl-shell] .aero-theme .main-block { background-image:none; }
 html[data-gl-shell] .aero-theme qsp-view { position:fixed; inset:0; width:100vw; height:100dvh; z-index:2000; display:flex; align-items:center; justify-content:center; background:rgb(0 0 0 / 78%); }
 html[data-gl-shell] .aero-theme qsp-view img, html[data-gl-shell] .aero-theme qsp-view video { max-width:calc(100vw - 32px); max-height:88dvh; width:auto; height:auto; object-fit:contain; }
-html[data-gl-shell] .cloud-account-dialog { box-sizing:border-box; max-height:calc(100dvh - 24px); overflow:auto; background:#faf8f3; color:#292735; border:1px solid #d9d3c9; border-radius:18px; padding:24px; }
-html[data-gl-shell] .cloud-account-dialog input { border:1px solid #bbb4a9; border-radius:8px; background:#fff; color:#292735; }
-html[data-gl-shell] .cloud-account-actions button { border:1px solid #c6bdaE; border-radius:8px; background:#f1eee8; color:#292735; }
+html[data-gl-shell] .cloud-account-dialog { box-sizing:border-box; max-height:calc(100dvh - 24px); overflow:auto; background:var(--gl-paper); color:var(--gl-ink); border:1px solid var(--gl-line); border-radius:18px; padding:24px; }
+html[data-gl-shell] .cloud-account-dialog .cloud-account-intro { color:var(--gl-muted); }
+html[data-gl-shell] .cloud-account-dialog input { border:1px solid var(--gl-line); border-radius:8px; background:var(--gl-panel); color:var(--gl-ink); }
+html[data-gl-shell] .cloud-account-dialog .cloud-account-status { color:var(--gl-ink); }
+html[data-gl-shell] .cloud-account-actions button { border:1px solid var(--gl-line); border-radius:8px; background:var(--gl-panel); color:var(--gl-ink); }
 html[data-gl-shell] .cloud-account-dialog[data-intent="register"] button[value="create"] { background:#e8b75f; color:#211a2b; border-color:#b38336; }
 @media(min-width:901px) {
-  html[data-gl-shell] qsp-main { position:fixed !important; left:24px; right:360px; top:calc(var(--gl-top) + 20px); bottom:calc(var(--gl-bottom) + 20px); width:auto !important; height:auto !important; background:var(--gl-paper); border:1px solid var(--gl-line); border-radius:12px; overflow:hidden; }
-  html[data-gl-shell] qsp-actions { position:fixed !important; left:auto; right:24px; top:calc(var(--gl-top) + 20px); bottom:calc(var(--gl-bottom) + 20px); width:312px !important; height:auto !important; background:var(--gl-paper); border:1px solid var(--gl-line); border-radius:12px; overflow:hidden; }
+  html[data-gl-shell] qsp-main { position:fixed !important; left:24px; right:calc(var(--gl-aside) + 48px); top:calc(var(--gl-top) + 20px); bottom:calc(var(--gl-bottom) + 20px); width:auto !important; height:auto !important; background:var(--background-color); border:1px solid var(--gl-line); border-radius:8px; overflow:hidden; }
+  html[data-gl-shell] qsp-actions { position:fixed !important; left:auto; right:24px; top:calc(var(--gl-top) + 20px); bottom:calc(var(--gl-bottom) + 20px); width:var(--gl-aside) !important; height:auto !important; background:var(--background-color); border:1px solid var(--gl-line); border-radius:8px; overflow:hidden; }
   html[data-gl-shell] qsp-cl-pane:has(> qsp-stats), html[data-gl-shell] qsp-cl-pane:has(> qsp-objects) { display:none !important; }
   html[data-gl-shell] qsp-player:has([data-mobile-panel="stats"][aria-pressed="true"]) qsp-cl-pane:has(> qsp-stats), html[data-gl-shell] qsp-player:has([data-mobile-panel="objects"][aria-pressed="true"]) qsp-cl-pane:has(> qsp-objects) { display:block !important; }
   html[data-gl-shell] qsp-stats, html[data-gl-shell] qsp-objects { display:none !important; }
-  html[data-gl-shell] qsp-player:has([data-mobile-panel="stats"][aria-pressed="true"]) qsp-stats, html[data-gl-shell] qsp-player:has([data-mobile-panel="objects"][aria-pressed="true"]) qsp-objects { display:block !important; position:fixed !important; z-index:1000; left:auto; right:24px; top:calc(var(--gl-top) + 20px); bottom:calc(var(--gl-bottom) + 20px); width:312px !important; height:auto !important; background:var(--gl-paper); padding:12px; border:1px solid var(--gl-line); border-radius:12px; overflow:auto; box-shadow:0 8px 30px #211c2b22; }
+  html[data-gl-shell] qsp-player:has([data-mobile-panel][aria-pressed="true"]) qsp-actions { top:calc(var(--gl-top) + 20px + var(--gl-side-height) * .64 + 12px); }
+  html[data-gl-shell] qsp-player:has([data-mobile-panel="stats"][aria-pressed="true"]) qsp-stats, html[data-gl-shell] qsp-player:has([data-mobile-panel="objects"][aria-pressed="true"]) qsp-objects { display:block !important; position:fixed !important; z-index:1000; left:auto; right:24px; top:calc(var(--gl-top) + 20px); bottom:calc(var(--gl-bottom) + 20px + var(--gl-side-height) * .36); width:var(--gl-aside) !important; height:auto !important; background:var(--background-color); padding:8px; border:1px solid var(--gl-line); border-radius:8px; overflow:auto; }
 }
 @media(max-width:900px) {
   :root[data-gl-shell] { --gl-top:48px; --gl-bottom:calc(64px + env(safe-area-inset-bottom)); }
@@ -862,7 +867,7 @@ html[data-gl-shell] .cloud-account-dialog[data-intent="register"] button[value="
 BROWSER_UI_JS = r'''(() => {
   if (document.documentElement.hasAttribute("data-gl-shell")) return;
   const root = document.documentElement;
-  root.setAttribute("data-gl-shell", "cloud-22");
+  root.setAttribute("data-gl-shell", "cloud-23");
   const storageKey = "girllife.browser.interface.v1";
   const defaults = {text:18, picture:48, share:70};
   const bounds = {text:[16,24], picture:[24,64], share:[55,80]};
@@ -904,7 +909,7 @@ BROWSER_UI_JS = r'''(() => {
       </section>
       <section class="gl-tabpanel" id="gl-page-settings" role="tabpanel" aria-labelledby="gl-tab-settings" hidden><h2>Make room for your story</h2>${settingsMarkup()}<button class="gl-secondary" data-command="reset">Reset interface</button></section>
       <section class="gl-tabpanel" id="gl-page-help" role="tabpanel" aria-labelledby="gl-tab-help" hidden><h2>Everything in one place</h2><ul><li>Play opens the game. Use its Start action for a new character.</li><li>Items and Stats open the game's own panels; select again to close.</li><li>Saves opens the existing cloud-save panel after sign-in.</li><li>Home returns here without restarting or saving the game.</li></ul><p>Keep a separate copy of important saves. Physical-phone and Windows testing is not complete.</p><button class="gl-secondary" data-command="diagnostics">View diagnostic report</button><p><a href="https://github.com/samttoo22-MewCat/GirlLife2HTML" target="_blank" rel="noopener noreferrer">Project & documentation</a></p></section>
-      <footer class="gl-home-footer">GirlLife2HTML · cloud-22 · Powered by qSpider<br>Unofficial interface · no game-content rewrite</footer>
+      <footer class="gl-home-footer">GirlLife2HTML · cloud-23 · Powered by qSpider<br>Unofficial interface · no game-content rewrite</footer>
     </div>`;
   const header = document.createElement("header");
   header.className = "gl-header"; header.hidden = true;
@@ -941,7 +946,7 @@ BROWSER_UI_JS = r'''(() => {
     else header.querySelector("button").focus();
   }
   function report() {
-    return JSON.stringify({interface:"cloud-22", viewport:[innerWidth,innerHeight], theme:document.querySelector(".aero-theme") ? "aero" : "classic", engineReady:ready, display:settings, panels:{items:!!document.querySelector("qsp-objects"),stats:!!document.querySelector("qsp-stats")}}, null, 2);
+    return JSON.stringify({interface:"cloud-23", viewport:[innerWidth,innerHeight], theme:document.querySelector(".aero-theme") ? "aero" : "classic", engineReady:ready, display:settings, panels:{items:!!document.querySelector("qsp-objects"),stats:!!document.querySelector("qsp-stats")}}, null, 2);
   }
   async function engine(command) {
     if (!ready || typeof window.girllifeBrowserCommand !== "function") { notify("The game is still loading. Please wait."); return; }
@@ -988,14 +993,30 @@ BROWSER_UI_JS = r'''(() => {
     });
   });
   function syncPanels() {
+    let active = "";
     for (const key of ["objects","stats"]) {
       const native = document.querySelector('qsp-player [data-mobile-panel="' + key + '"]');
       const selected = native && native.getAttribute("aria-pressed") === "true";
       const button = dock.querySelector('[data-command="' + key + '"]');
       if (button.getAttribute("aria-pressed") !== String(!!selected)) button.setAttribute("aria-pressed", String(!!selected));
+      if (selected) active = key;
+    }
+    const caption = active === "stats" ? "Status panel · actions below" : active === "objects" ? "Inventory · actions below" : "Browser edition";
+    if (header.querySelector("small").textContent !== caption) header.querySelector("small").textContent = caption;
+  }
+  function syncPalette() {
+    const game = document.querySelector("qsp-game-root");
+    if (!game) return;
+    const css = getComputedStyle(game);
+    // Read the effective engine palette, not saved copies or shell preferences.
+    // Classic derives these from --code-*; Aero supplies the same names directly.
+    for (const [target, source] of [["--gl-paper","--background-color"],["--gl-ink","--color"],["--gl-accent","--link-color"]]) {
+      const value = css.getPropertyValue(source).trim();
+      if (value && CSS.supports("color",value) && root.style.getPropertyValue(target) !== value) root.style.setProperty(target,value);
     }
   }
   function sync() {
+    syncPalette();
     ready = ready || (!!document.querySelector('qsp-main-content') && !!document.querySelector('[data-qsp="action"]') && typeof window.girllifeBrowserCommand === "function");
     const play = home.querySelector('[data-command="play"]');
     const label = ready ? (entered ? "Return to game" : "Play") : "Preparing game…";
@@ -1009,7 +1030,7 @@ BROWSER_UI_JS = r'''(() => {
     syncPanels();
   }
   let pending = false;
-  new MutationObserver(() => { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; sync(); }); } }).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:["aria-pressed"]});
+  new MutationObserver(() => { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; sync(); }); } }).observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:["aria-pressed","style"]});
   applySettings(); sync();
 })();
 '''

@@ -35,7 +35,7 @@ This is an **unofficial HTML builder**, not the original Girl Life project.
 
 ## Screenshots
 
-- **Source:** local cloud-22 test package, captured on 2026-11-01.
+- **Source:** local cloud-23 test package, captured on 2026-11-01.
 - **Mobile:** simulated 390×844 touch viewport, not a physical phone.
 - **Account dialog:** shared registration/sign-in screen, with no credentials entered.
 - **Credits:** game content belongs to its respective creators.
@@ -53,6 +53,10 @@ This is an **unofficial HTML builder**, not the original Girl Life project.
 ### Desktop website
 
 ![Desktop gameplay at 1440×1000](docs/screenshots/game-desktop.png)
+
+### In-game colors and right-column panels
+
+![Frappé game theme with Stats above actions](docs/screenshots/game-colors-desktop.png)
 
 ## Requirements
 
@@ -147,7 +151,9 @@ The original QSP engine still runs the game. The new shell changes presentation,
 | Menu | Opens display settings, cloud account, native game preferences, and help/diagnostics. |
 
 - Display settings stay in this browser under `girllife.browser.interface.v1`; they are not part of a cloud save.
-- Desktop uses story/actions columns; mobile uses full-width stacked panes and a bottom toolbar.
+- Desktop uses story/actions columns. Opening Items or Stats places that panel above the actions in a wider right column, without covering the choices; wider original tables can scroll.
+- Mobile uses full-width stacked panes and a bottom toolbar.
+- **Game colors remain authoritative:** use the game's Display settings for colors. Background/text/link colors, header and toolbar follow the active game theme and update after loading a save. Interface reset does not reset game colors.
 - Diagnostic reports are displayed locally and copied only on request. No report is sent automatically; account names, tokens, and story/save contents are excluded.
 - The city SVG and shell code are original. Only the design/workflow concepts were inspired by [Girl Life Launcher](https://github.com/glife-launcher/GLreleases/releases).
 - See [workflow research and test instructions](docs/launcher-workflows.md) for adopted ideas and deferred features.
@@ -183,7 +189,7 @@ Applies to **Classic and Aero at widths up to 900 CSS px**.
 
 | Check | Recorded result |
 | --- | --- |
-| Live version | **cloud-22** at `https://girllife.mewcat.me/` |
+| Live version | **cloud-23** at `https://girllife.mewcat.me/` |
 | Source | Browser shell, tests, and bilingual docs in this repository |
 | Service | Restarted; `active` |
 | Homepage | HTTP 200 |
@@ -191,12 +197,14 @@ Applies to **Classic and Aero at widths up to 900 CSS px**.
 
 Public smoke checks also passed: launcher → Play, account-required Saves → Cancel, immediate settings → Escape, Home, and desktop columns. Production API calls were blocked in that isolated browser test; no production account or save was created.
 
-### cloud-22 local checks
+### cloud-23 local checks
 
 - Original QSP gameplay with inventory mounted, not just a title-screen fixture.
 - Classic and Aero: **320×568, 390×844, 430×932, 768×1024, 901×700, 1440×1000** geometry and panel switching.
 - Keyboard tabs, settings persistence/reset, horizontal creation tables, Home preserving the current scene, media inside/outside taps, native preferences, and Escape isolation.
-- Registration, save/load, and sign-out against a **throwaway local database**, never production accounts. One exploratory Aero run received a storage HTTP 503; the rerun passed. This UI change does not claim to fix intermittent backend storage errors.
+- Registration, save/load, and sign-out against a **throwaway local database**, never production accounts. An earlier cloud-22 exploratory Aero run received a storage HTTP 503; the rerun passed. This UI change does not claim to fix intermittent backend storage errors.
+- Real in-game Frappé selection → save → Latte selection → load restores the exact background, text and link colors, including shell chrome, in both Classic and Aero. Desktop Stats/actions do not overlap; 320/390/430px color checks also pass.
+- cloud-22's fixed shell colors incorrectly hid the engine palette. cloud-23 removes those overrides; this is a presentation fix, not a save-data migration or a claim that every historical save was repaired.
 - Builder syntax, generated JavaScript syntax, cache refresh, and repeat-application tests.
 - Original QSP/media remain unchanged. These are browser-emulation checks, not physical-device acceptance.
 

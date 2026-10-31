@@ -8,7 +8,7 @@ Reviewed 2026-11-01. This is an independent browser implementation, not a port o
 - [v0.85.5 user guide](https://github.com/glife-launcher/GLreleases/releases/download/v0.85.5/GUIDE.html)
 - [Reference screenshots](https://github.com/glife-launcher/GLreleases/tree/main/screenshots)
 
-## Adopted in cloud-22
+## Adopted in cloud-22 / corrected in cloud-23
 
 | Reference concept | Browser adaptation | Boundary |
 | --- | --- | --- |
@@ -16,6 +16,8 @@ Reviewed 2026-11-01. This is an independent browser implementation, not a port o
 | Dark launcher and gold primary action | Original CSS, SVG city drawing and icons | No copied artwork, screenshots, or launcher executable code. |
 | Mobile tool strip | Home, Items, Stats, Saves, Menu | Opens engine panels rather than duplicating game logic. |
 | Readable game layout | Desktop story/actions columns; mobile full-width split | Keeps original creation tables horizontally scrollable. |
+| Respect game display preferences | Use FCOLOR/BCOLOR/LCOLOR for the game; mirror the effective palette into chrome | Never replace engine color variables with fixed shell colors. cloud-22 violated this and cloud-23 corrects it. |
+| Side panels without losing choices | Wider desktop right column; Items/Stats above actions | Wider tables remain scrollable; mobile retains its pane-replacement behavior. |
 | Immediate UI settings | Text, picture height and mobile split sliders | Browser-local preferences, not QSP variables or cloud account data. |
 | Reset UI | Reset these three display values | Does not erase account, progress, saves, or engine preferences. |
 | Save entry points | Reuse the existing authenticated save panel | Existing numbered/named/quick-save storage unchanged. |
@@ -53,6 +55,7 @@ With an existing Playwright installation and headless Edge:
 
 ```sh
 GL_TEST_URL=http://127.0.0.1:8094 node tests/browser_ui.cjs
+GL_TEST_URL=http://127.0.0.1:8094 node tests/theme_colors.cjs
 ```
 
 If Playwright is not on Node's module search path, set `PLAYWRIGHT_MODULE` to its installed module directory. `GL_SCREENSHOTS` optionally selects a screenshot output directory. No dependency installation is performed by the script.
@@ -62,5 +65,6 @@ If Playwright is not on Node's module search path, set `PLAYWRIGHT_MODULE` to it
 - Run once with `mode = "classic"`, then with `mode = "aero"` in the isolated package's `game/game.cfg`. Never change the live or original configuration just to test a theme.
 - Both themes passed the complete flow at six viewports: 320×568, 390×844, 430×932, 768×1024, 901×700 and 1440×1000.
 - Coverage: launcher tabs/keyboard, persistent/reset display preferences, creation table columns, real gameplay/inventory, panel exclusivity, Home preservation, image inside/outside taps, native preferences, authenticated save/load, sign-out, and Escape isolation.
+- Color regression: select real Frappé → local save → real Latte → load; verify background/text/link colors and chrome match the saved game in both themes. Also check desktop Stats/actions separation and phone-width palette rendering.
 - An exploratory Aero run received a storage HTTP 503; later runs passed. Backend storage reliability is not fixed or certified by this frontend change.
 - Physical Android/iPhone/Safari, Windows launchers, every inventory interaction and full-game coverage remain unverified.

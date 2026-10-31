@@ -1,5 +1,6 @@
 """Builder-only regressions; no game assets, downloads, or cloud requests."""
 import importlib.util
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -57,6 +58,13 @@ class BrowserUIBuildTests(unittest.TestCase):
         (self.output / "assets/index-test.js").write_text("console.log('changed upstream player')")
         with self.assertRaisesRegex(RuntimeError, "storage hook changed"):
             builder.apply_cloud_saves(self.output)
+
+    def test_shell_does_not_shadow_engine_palette(self):
+        css = re.sub(r"/\*.*?\*/", "", builder.BROWSER_UI_CSS, flags=re.S)
+        self.assertNotRegex(css,
+                            r"--(?:color|background-color|link-color|code-color|code-background-color)\s*:")
+        self.assertIn('function syncPalette()', builder.BROWSER_UI_JS)
+        self.assertIn('characterData:true', builder.BROWSER_UI_JS)
 
 
 if __name__ == "__main__":
