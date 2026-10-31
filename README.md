@@ -6,6 +6,18 @@ Build and run a browser-playable package of the original English Girl Life QSP g
 
 This repository contains the builder only. It does not include the game, images, sounds, or generated game package. Provide the game and assets you are authorized to use.
 
+## Screenshots
+
+Captured from the live cloud-21 site on 2026-11-01. Mobile views use a simulated 390×844 touch viewport, not a physical-phone capture. The account screen is the shared registration/sign-in dialog, with no credentials entered; background game images are hidden in that screenshot. Game content belongs to its respective creators.
+
+### Mobile interface and account dialog
+
+<img src="docs/screenshots/mobile-interface.png" alt="Mobile interface with scrollable character-creation table and Items/Stats controls" width="300"> <img src="docs/screenshots/account-interface.png" alt="Cloud account registration and sign-in dialog" width="300">
+
+### Desktop website
+
+![Desktop website at 1440×1000](docs/screenshots/website-interface.png)
+
 ## Requirements
 
 - macOS or Windows 10/11

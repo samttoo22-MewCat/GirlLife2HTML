@@ -6,6 +6,18 @@ English documentation: [README.md](README.md)
 
 此 repo 只包含建置工具，不包含遊戲本體、圖片、音效或生成後的遊戲包。請自行放入你有權使用的遊戲與素材。
 
+## 介面截圖
+
+2026-11-01 擷取自線上 cloud-21 版本。手機畫面使用 390×844 觸控模擬視窗，並非實體手機截圖。帳號畫面是共用的註冊／登入對話框，未輸入任何帳密；該張截圖隱藏了背景遊戲圖片。遊戲內容權利歸原作者所有。
+
+### 手機介面與登入／註冊介面
+
+<img src="docs/screenshots/mobile-interface.png" alt="手機創角表格與 Items／Stats 按鈕" width="300"> <img src="docs/screenshots/account-interface.png" alt="雲端帳號註冊與登入對話框" width="300">
+
+### 桌面網站介面
+
+![1440×1000 桌面網站介面](docs/screenshots/website-interface.png)
+
 ## 需求
 
 - macOS 或 Windows 10/11
