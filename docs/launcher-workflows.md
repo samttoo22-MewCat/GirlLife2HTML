@@ -66,5 +66,6 @@ If Playwright is not on Node's module search path, set `PLAYWRIGHT_MODULE` to it
 - Both themes passed the complete flow at six viewports: 320×568, 390×844, 430×932, 768×1024, 901×700 and 1440×1000.
 - Coverage: launcher tabs/keyboard, persistent/reset display preferences, creation table columns, real gameplay/inventory, panel exclusivity, Home preservation, image inside/outside taps, native preferences, authenticated save/load, sign-out, and Escape isolation.
 - Color regression: select real Frappé → local save → real Latte → load; verify background/text/link colors and chrome match the saved game in both themes. Also check desktop Stats/actions separation and phone-width palette rendering.
+- Scope caveat: the local Aero fixture logged HTTP 404 for `/aero/*.png` theme icons, plus optional game configuration probes. The passing color/layout suites do not establish complete theme-asset coverage; those missing-resource paths were not repaired in cloud-23.
 - An exploratory Aero run received a storage HTTP 503; later runs passed. Backend storage reliability is not fixed or certified by this frontend change.
 - Physical Android/iPhone/Safari, Windows launchers, every inventory interaction and full-game coverage remain unverified.
