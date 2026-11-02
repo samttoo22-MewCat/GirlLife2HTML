@@ -3,7 +3,10 @@
 ## Scope
 
 - This repository is an unofficial builder, not Girl Life itself. Upstream release, source, and community links are in both READMEs.
-- Do not commit the QSP, media packs, generated package, credentials, databases, or player saves.
+- Do not commit the QSP binary, media packs, generated playable package, credentials, databases, or player saves.
+- Explicit 2026-11-02 publication exception: the user requested Story Atlas workflow code, ALL extracted source/node information and current translation progress in this existing repository. `story-atlas/snapshot/` contains gzip extraction data and a consistent, dated JSONL progress export, not raw SQLite or credentials. Preserve source-content rights; the code license does not relicense game text. No public game-service deployment/restart is required for docs/data publication.
+- Keep progress labelled as a snapshot, not live/finished or directly resumable production state. Preserve historical model labels; new stages all use DeepSeek V4.1 Flash. Do not publish operational AGENTS notes, private OAuth/configured-key files, raw requests/responses, logs or backups.
+- `python3 story-atlas/verify_snapshot.py` verifies manifest hashes, all747,993 literal spans,1,397 locations,19,168 nodes/141,109 edges,248,199 catalog units and exported progress row counts. Static edge IDs are array indices (`enumerate(graph['edges'])`), not an edge `id` field; the first publication verifier assumed the latter and failed before publishing, then was corrected against `static_tree.py` and passed the full data check. Do not change source IDs to satisfy a verification fixture.
 - Keep original game/media and existing account/save behavior intact. Player licensing does not grant game-content or media rights.
 
 ## cloud-23 browser interface

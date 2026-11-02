@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Story Atlas · 劇情索引</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header><a class="brand" href="/">STORY ATLAS <span>劇情索引工作台</span></a><nav><a href="/translate">翻譯工作台</a><span class="badge">LOCAL · 唯讀</span></nav></header>
+<main>
+<section class="intro"><div><h1>從開始，展開劇情分支。</h1></div></section>
+<div class="workspace">
+<aside><h2>劇情樹</h2><button id="entry" class="wide" disabled>開始</button><nav id="nodes" aria-label="劇情樹"></nav></aside>
+<section class="detail" aria-live="polite"><div class="detail-head"><h2 id="title">開始</h2><button id="export" disabled>下載無循環分支編號</button></div>
+<section id="texts"><div id="literal-list"><p>按「開始」查看分支。</p></div><div id="choices" aria-label="劇情選項"></div><details id="related"><summary>其他連接節點</summary><div id="related-choices"></div></details></section>
+</section></div><p id="status" role="status"></p>
+</main><footer>無循環靜態劇情圖 · 保留分支匯合、排除回環；不執行遊戲，條件仍待確認。</footer>
+</body></html>

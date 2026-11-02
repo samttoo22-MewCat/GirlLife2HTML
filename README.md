@@ -4,10 +4,11 @@
 
 Build and run a browser-playable package of the original English Girl Life QSP game using the official QSPFoundation qSpider player.
 
-> **Builder only:** this repository does not include the game, images, sounds, or generated game package. Provide the game and assets you are authorized to use.
+> **No playable game/media bundle:** provide the game and assets you are authorized to use. The separate [Story Atlas](story-atlas/README.md) now includes translation-workflow code, extracted source/node information and a dated progress snapshot; it is not a finished translated game. Game text retains its original rights.
 
 ## Contents
 
+- [Translation workflow, all extracted nodes and progress](#translation-workflow-all-extracted-nodes-and-progress)
 - [Original game and community](#original-game-and-community)
 - [Screenshots](#screenshots)
 - [Requirements](#requirements)
@@ -21,6 +22,18 @@ Build and run a browser-playable package of the original English Girl Life QSP g
 - [Asset discovery and missing files](#asset-discovery-and-missing-files)
 - [Scope and limitations](#scope-and-limitations)
 - [License](#license)
+
+## Translation workflow, all extracted nodes and progress
+
+See [Story Atlas](story-atlas/README.md), the [translation workflow](story-atlas/WORKFLOW.md), and the [published progress snapshot](story-atlas/PROGRESS.md).
+
+- Complete static inventory: **1,397 extracted locations, 19,168 event nodes and 141,109 candidate edges**. Shared nodes/cycles are references, not duplicated route text. Conditions and dynamic targets are not all resolved.
+- Includes all **248,199 catalogued text units** (235,431 eligible; 12,768 requiring review), the original extraction records, candidate/acyclic edge IDs, saved translations, glossary and branch progress. This is not a claim of complete reachable gameplay or finished translation.
+- New translation, residual correction, glossary review and review-format correction requests all use **DeepSeek V4.1 Flash**. Historical Pro work is not relabelled.
+- Progress is a **point-in-time snapshot**, not a live dashboard or an automatically resumable copy of the private production database. See its timestamp and remaining/failed work before using it.
+- No API keys, OAuth/session credentials, raw SQLite databases, operational logs/backups, player accounts/saves, QSP binary or media are included. Extracted game text is separate from the builder's code license.
+
+The existing public game service is not changed by publishing this documentation/data.
 
 ## Original game and community
 

@@ -1,0 +1,54 @@
+{
+  "snapshot_started_utc": "2026-11-02T02:26:51.924655+00:00",
+  "snapshot_finished_utc": "2026-11-02T02:27:22.230939+00:00",
+  "session": {
+    "id": "9351c8b79dec4577b986db0708e1aa3c",
+    "run_id": "27742f316ecc48f38087433823d89556",
+    "requested": 1000,
+    "concurrency": 5,
+    "status": "running",
+    "stop": 0,
+    "error": null,
+    "created": "2026-11-01 20:20:49"
+  },
+  "completed_in_current_round": 397,
+  "requested_in_current_round": 1000,
+  "approved_batches_all_rounds": 1055,
+  "table_rows": {
+    "meta": 1,
+    "runs": 1,
+    "batches": 1060,
+    "translations": 30787,
+    "glossary": 1613,
+    "glossary_proposals": 1771,
+    "branch_runs": 1,
+    "branch_sessions": 3,
+    "branch_jobs": 13624,
+    "branch_nodes": 1826,
+    "branch_batches": 1002,
+    "branch_merges": 3305,
+    "retained_results": 17
+  },
+  "failed_jobs": [],
+  "translation_model": "deepseek/deepseek-v4.1-flash",
+  "review_model": "deepseek/deepseek-v4.1-flash",
+  "source_qsp_sha256": "f29cae3e172c73d0351ef91f11482a805e9fb1f20f403dd031547918310a61bb",
+  "scope": "Complete static extraction inventory and a point-in-time progress export; not complete runtime coverage or a finished translation",
+  "excluded": [
+    "API keys",
+    "OAuth/session credentials",
+    "raw SQLite databases",
+    "raw model requests/responses",
+    "logs/backups",
+    "game binary/media",
+    "player accounts/saves"
+  ],
+  "node_inventory": {
+    "locations": 1397,
+    "event_nodes": 19168,
+    "candidate_edges": 141109,
+    "catalog_units": 248199,
+    "eligible_units": 235431,
+    "review_units": 12768
+  }
+}
