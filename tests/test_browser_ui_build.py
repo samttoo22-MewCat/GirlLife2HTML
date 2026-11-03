@@ -66,6 +66,23 @@ class BrowserUIBuildTests(unittest.TestCase):
         self.assertIn('function syncPalette()', builder.BROWSER_UI_JS)
         self.assertIn('characterData:true', builder.BROWSER_UI_JS)
 
+    def test_launcher_is_compact_and_has_no_decorative_art(self):
+        self.assertNotIn('class="gl-art"', builder.BROWSER_UI_JS)
+        self.assertIn('width:min(100%,620px)', builder.BROWSER_UI_CSS)
+        self.assertIn('justify-content:center', builder.BROWSER_UI_CSS)
+        for tab in ('Play', 'Settings', 'Help'):
+            self.assertIn(f'>{tab}</button>', builder.BROWSER_UI_JS)
+        self.assertIn('data-command="saves"', builder.BROWSER_UI_JS)
+
+    def test_launcher_offers_persistent_traditional_chinese_interface(self):
+        self.assertIn('id="gl-language"', builder.BROWSER_UI_JS)
+        self.assertIn('value="zh">繁體中文', builder.BROWSER_UI_JS)
+        self.assertIn('girllife.browser.language.v1', builder.BROWSER_UI_JS)
+        self.assertIn('language:"介面語言"', builder.BROWSER_UI_JS)
+        self.assertIn('本遊戲限年滿 18 歲者遊玩', builder.BROWSER_UI_JS)
+        self.assertIn('原始英文 QSP', builder.BROWSER_UI_JS)
+        self.assertEqual(builder.CLOUD_SAVE_CACHE_VERSION, 'girllife-cloud-25')
+
 
 if __name__ == "__main__":
     unittest.main()

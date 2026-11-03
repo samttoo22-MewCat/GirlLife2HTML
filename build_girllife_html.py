@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 PLAYER_URL = "https://github.com/QSPFoundation/qspider/releases/download/v1.3.1/qspider-player-standalone.zip"
 PLAYER_SHA256 = "acedec0b5597c055559f95ac52a64518bf106d4dbef2262c1c8c7f4ec822a47c"
 CLOUD_SAVE_API_URL = "https://girllife.mewcat.me/api"
-CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-23"
+CLOUD_SAVE_CACHE_VERSION = "girllife-cloud-25"
 LOAD_PROGRESS_VERSION = "girllife-loading-progress-v4"
 GZIP_QSP_HANDLER = '''class GzipQSPHandler(SimpleHTTPRequestHandler):
     def send_head(self):
@@ -720,7 +720,7 @@ WebStorage.prototype.clearSaveKey = async function(game, key) {
 BROWSER_UI_CSS = r'''
 /* GirlLife browser shell. Original artwork and code, not launcher assets. */
 :root[data-gl-shell] {
-  --gl-ink:#292735; --gl-paper:#faf8f3; --gl-accent:#95631d;
+  --gl-ink:#292735; --gl-paper:#faf8f3; --gl-accent:#725018;
   --gl-muted:color-mix(in srgb,var(--gl-ink) 80%,var(--gl-paper));
   --gl-panel:color-mix(in srgb,var(--gl-paper) 94%,var(--gl-ink));
   --gl-line:color-mix(in srgb,var(--gl-paper) 75%,var(--gl-ink));
@@ -740,38 +740,37 @@ BROWSER_UI_CSS = r'''
 }
 .gl-home [hidden], .gl-dialog [hidden], .gl-home[hidden], .gl-dock[hidden], .gl-header[hidden] { display:none !important; }
 .gl-home {
-  position:fixed; inset:0; z-index:4000; overflow:auto; color:#f1edf8;
-  background:#181521; display:grid; grid-template-columns:minmax(0,1fr) minmax(380px,1fr);
+  position:fixed; inset:0; z-index:4000; overflow:auto; color:#292735;
+  background:linear-gradient(145deg,#f8f6f0,#eeece6); display:flex; align-items:safe center; justify-content:center; padding:24px;
 }
-.gl-art { position:relative; overflow:hidden; min-height:300px; background:linear-gradient(155deg,#1c3c57,#263753 48%,#181521 90%); }
-.gl-art::before { content:""; position:absolute; inset:0; background:radial-gradient(ellipse at 25% 32%,#839cb24d,transparent 55%),linear-gradient(90deg,transparent 60%,#181521); }
-.gl-art svg { position:absolute; width:100%; height:65%; bottom:8%; color:#bea574; opacity:.65; }
-.gl-art-caption { position:absolute; left:10%; bottom:8%; max-width:320px; }
-.gl-art-caption span, .gl-eyebrow { font-size:11px; letter-spacing:.19em; text-transform:uppercase; }
-.gl-art-caption h2 { font:400 clamp(30px,4vw,56px)/1.15 Georgia,serif; letter-spacing:-.02em; margin:12px 0; }
-.gl-home-panel { display:flex; flex-direction:column; padding:clamp(28px,5vw,80px); min-width:0; }
-.gl-wordmark { font-size:30px; font-weight:300; letter-spacing:.2em; margin:0; }
+.gl-home-panel { display:flex; flex-direction:column; width:min(100%,620px); min-width:0; padding:clamp(24px,5vw,48px); background:#fff; border:1px solid #e1ddd3; border-radius:18px; box-shadow:0 18px 55px #28251c12; }
+.gl-home-title { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.gl-language { display:flex; align-items:center; gap:8px; color:#494550; font-size:13px; }
+.gl-language select { min-height:44px; padding:6px 30px 6px 10px; border:1px solid #c9c3b8; border-radius:8px; background:#fff; color:#292735; font:inherit; cursor:pointer; }
+.gl-wordmark { font-size:27px; font-weight:350; letter-spacing:.14em; margin:0; color:#302c38; }
 .gl-wordmark strong { font-weight:750; }
-.gl-eyebrow { color:#b1a9c4; margin:8px 0 24px; }
-.gl-tabs { display:flex; gap:24px; border-bottom:1px solid #393343; }
-.gl-tabs button { min-width:44px; border:0; border-radius:0; background:none; color:#aaa1bb; padding:10px 0; letter-spacing:.12em; font-size:12px; text-transform:uppercase; }
-.gl-tabs button[aria-selected="true"] { color:#fff; box-shadow:0 2px #e4ad51; }
-.gl-tabpanel { padding-top:28px; flex:1; }
+.gl-eyebrow { color:#686471; margin:4px 0 18px; font-size:13px; }
+.gl-tabs { display:flex; gap:8px; width:max-content; max-width:100%; border-bottom:1px solid #e7e3da; }
+.gl-tabs button { min-width:58px; border:0; border-radius:7px 7px 0 0; background:none; color:#66616e; padding:7px 10px; letter-spacing:.04em; font-size:13px; }
+.gl-tabs button[aria-selected="true"] { color:#342b1b; box-shadow:0 2px #b27b24; }
+.gl-tabpanel { padding-top:18px; }
 .gl-tabpanel h2 { font-size:22px; margin:0 0 10px; }
-.gl-tabpanel p { color:#c0b9cc; font-size:14px; }
-.gl-play-block { padding-top:clamp(24px,9vh,120px); }
-.gl-primary { display:block; width:100%; padding:16px 22px; border:1px solid #e2a84c; background:linear-gradient(#f2c169,#daa03e); color:#211a2b; font-weight:750 !important; box-shadow:0 8px 24px #d79a3420; }
+.gl-tabpanel p { color:#494550; font-size:14px; line-height:1.55; }
+.gl-play-block { padding-top:12px; }
+.gl-primary { display:block; width:min(100%,300px); padding:12px 22px; border:1px solid #8d6425; background:#9a702f; color:#fff; font-weight:700 !important; transition:background-color .2s ease, box-shadow .2s ease; }
+.gl-primary:hover:not(:disabled) { background:#805c27; box-shadow:0 5px 14px #72501825; }
 .gl-primary:disabled { opacity:.55; cursor:wait; }
-.gl-readiness { min-height:28px; margin:14px 0 26px; color:#b9d1b1 !important; }
-.gl-home .gl-secondary { width:100%; border:1px solid #514658; color:#eee8f5; background:#252030; padding:10px 16px; }
-.gl-facts { margin:28px 0; border-top:1px solid #393343; }
-.gl-facts div { padding:14px 0; border-bottom:1px solid #393343; }
-.gl-facts dt { color:#b1a9c4; font-size:11px; letter-spacing:.12em; text-transform:uppercase; }
+.gl-readiness { min-height:24px; margin:8px 0 12px; color:#52644d !important; font-size:13px !important; }
+.gl-home .gl-secondary { width:min(100%,300px); border:1px solid #d9d4ca; color:#383440; background:#faf9f6; padding:9px 16px; }
+.gl-home .gl-secondary:hover { background:#f0eee8; }
+.gl-facts { display:flex; gap:28px; flex-wrap:wrap; margin:18px 0 10px; padding:12px 0; border-top:1px solid #e7e3da; border-bottom:1px solid #e7e3da; }
+.gl-facts div { padding:0; }
+.gl-facts dt { color:#6a6570; font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
 .gl-facts dd { margin:4px 0 0; font-size:14px; overflow-wrap:anywhere; }
-.gl-home-footer { color:#b1a9c4; font-size:12px; margin-top:28px; }
-.gl-home a { color:#f2c169; }
-.gl-home ul { padding-left:20px; color:#c0b9cc; font-size:14px; }
-.gl-home label { color:#eee8f5; }
+.gl-home-footer { color:#77727d; font-size:11px; margin-top:18px; }
+.gl-home a { color:#725018; }
+.gl-home ul { padding-left:20px; color:#494550; font-size:14px; }
+.gl-home label { color:#383440; }
 .gl-setting { display:block; margin:18px 0; }
 .gl-setting span { display:flex; justify-content:space-between; gap:12px; margin-bottom:10px; }
 .gl-setting input[type="range"] { width:100%; min-height:36px; accent-color:#b67b25; cursor:pointer; }
@@ -832,11 +831,12 @@ html[data-gl-shell] .cloud-account-dialog[data-intent="register"] button[value="
 }
 @media(max-width:900px) {
   :root[data-gl-shell] { --gl-top:48px; --gl-bottom:calc(64px + env(safe-area-inset-bottom)); }
-  .gl-home { display:block; }
-  .gl-art { display:none; }
-  .gl-home-panel { min-height:100dvh; padding:28px 22px; }
-  .gl-play-block { padding-top:40px; }
-  .gl-wordmark { font-size:28px; }
+  .gl-home { padding:16px; }
+  .gl-home-panel { padding:24px 20px; }
+  .gl-home-title { align-items:flex-start; }
+  .gl-language { gap:5px; font-size:12px; }
+  .gl-play-block { padding-top:8px; }
+  .gl-wordmark { font-size:25px; }
   .gl-header { padding:0 14px; gap:10px; }
   .gl-header small { display:none; }
   .gl-dock { gap:0; padding-inline:6px; }
@@ -867,8 +867,16 @@ html[data-gl-shell] .cloud-account-dialog[data-intent="register"] button[value="
 BROWSER_UI_JS = r'''(() => {
   if (document.documentElement.hasAttribute("data-gl-shell")) return;
   const root = document.documentElement;
-  root.setAttribute("data-gl-shell", "cloud-23");
+  root.setAttribute("data-gl-shell", "cloud-25");
   const storageKey = "girllife.browser.interface.v1";
+  const languageKey = "girllife.browser.language.v1";
+  const copy = {
+    en:{launcher:"Girl Life launcher",language:"Language",english:"English",traditional:"繁體中文",eyebrow:"English Community Version · Browser edition",pages:"Launcher pages",play:"Play",settings:"Settings",help:"Help",preparing:"Preparing game…",loading:"Loading the original QSP game. Download progress appears above.",loadSave:"Load a cloud save",game:"Game",gameInfo:"Reading game information…",gameLanguage:"Game language",gameEnglish:"English · original game file",adult:"For adults 18+. Play opens the game in this tab. Start a new character from the game menu.",settingsTitle:"Make room for your story",storyText:"Story text",storyTextAria:"Story text size",pictureHeight:"Picture height",pictureAria:"Maximum picture height",storyActions:"Story / actions",storyActionsAria:"Mobile story height percentage",settingsNote:"Changes apply immediately and stay on this browser, not in your save. Story/actions sizing applies on phones.",reset:"Reset interface",quickHelp:"Quick help",helpPlay:"Play opens the game; use Start to begin.",helpSaves:"Cloud saves require an account.",helpHome:"Home returns here without saving or restarting.",diagnostics:"View diagnostics",project:"Project & documentation",footer:"Unofficial interface · no game-content rewrite",browser:"Browser edition",ready:"Ready to play · original QSP engine",return:"Return to game",home:"Home",items:"Items",stats:"Stats",saves:"Saves",menu:"Menu",interface:"Interface",yourInterface:"Your interface",close:"Close",closeSettings:"Close interface settings",moreTools:"More game tools",account:"Cloud account",gamePreferences:"Game preferences",resetNote:"Reset changes only these display preferences, not your character, progress, cloud account or game variables.",helpDiagnostics:"Help & diagnostics",noReport:"No report is sent automatically. The report contains display/engine readiness information only: no story, account name, token or save content.",diagnosticReport:"Diagnostic report",copyReport:"Copy report",copyDone:"Report copied. Share it only if you choose.",copyFail:"Copy is unavailable. Select and copy the report above.",storageFail:"Browser storage is unavailable; settings last for this tab only.",resetDone:"Interface reset. Your game and saves are unchanged.",loadingWait:"The game is still loading. Please wait.",panelUnavailable:"This panel is not available on the current game screen.",homeNotice:"Game stays open in this tab. Returning home does not save it.",openFail:"Could not open this panel. Return to the game and try again.",status:"Status panel · actions below",inventory:"Inventory · actions below"},
+    zh:{launcher:"Girl Life 啟動頁",language:"介面語言",english:"English",traditional:"繁體中文",eyebrow:"英文社群版 · 瀏覽器版",pages:"啟動頁面",play:"開始遊戲",settings:"設定",help:"說明",preparing:"正在準備遊戲…",loading:"正在載入原始 QSP 遊戲。下載進度會顯示在上方。",loadSave:"載入雲端存檔",game:"遊戲",gameInfo:"正在讀取遊戲資訊…",gameLanguage:"遊戲語言",gameEnglish:"英文 · 原始遊戲檔案",adult:"本遊戲限年滿 18 歲者遊玩。按下「開始遊戲」會在此分頁開啟遊戲；請從遊戲選單開始新角色。",settingsTitle:"調整你的遊戲介面",storyText:"故事文字",storyTextAria:"故事文字大小",pictureHeight:"圖片高度",pictureAria:"圖片最大高度",storyActions:"故事／選項比例",storyActionsAria:"手機版故事區高度比例",settingsNote:"變更會立即套用並保存在此瀏覽器，不會寫入存檔。手機版才會套用故事／選項比例。",reset:"重設介面",quickHelp:"快速說明",helpPlay:"按「開始遊戲」開啟遊戲，再選擇 Start 開始。",helpSaves:"使用雲端存檔需要帳號。",helpHome:"返回首頁不會存檔，也不會重新啟動遊戲。",diagnostics:"查看診斷資訊",project:"專案與文件",footer:"非官方介面 · 不修改遊戲內容",browser:"瀏覽器版",ready:"可開始遊玩 · 原始 QSP 引擎",return:"返回遊戲",home:"首頁",items:"物品",stats:"狀態",saves:"存檔",menu:"選單",interface:"介面設定",yourInterface:"介面設定",close:"關閉",closeSettings:"關閉介面設定",moreTools:"更多遊戲工具",account:"雲端帳號",gamePreferences:"遊戲偏好設定",resetNote:"重設只會變更介面顯示偏好，不會影響角色、進度、雲端帳號或遊戲變數。",helpDiagnostics:"說明與診斷",noReport:"不會自動傳送任何報告。報告只包含介面／引擎就緒資訊，不含故事、帳號名稱、權杖或存檔內容。",diagnosticReport:"診斷報告",copyReport:"複製報告",copyDone:"已複製報告。請自行決定是否分享。",copyFail:"無法複製，請選取上方報告後手動複製。",storageFail:"瀏覽器儲存功能不可用；設定只會保留在此分頁。",resetDone:"介面已重設，遊戲與存檔不受影響。",loadingWait:"遊戲仍在載入，請稍候。",panelUnavailable:"目前遊戲畫面沒有此面板。",homeNotice:"遊戲仍在此分頁執行；返回首頁不會存檔。",openFail:"無法開啟此面板，請返回遊戲後再試。",status:"狀態面板 · 下方為選項",inventory:"物品欄 · 下方為選項"}
+  };
+  let language = "en";
+  try { language = localStorage.getItem(languageKey) === "zh" ? "zh" : "en"; } catch (_) {}
+  const t = key => (copy[language] && copy[language][key]) || copy.en[key] || key;
   const defaults = {text:18, picture:48, share:70};
   const bounds = {text:[16,24], picture:[24,64], share:[55,80]};
   const validate = value => Object.fromEntries(Object.keys(defaults).map(key => {
@@ -886,44 +894,41 @@ BROWSER_UI_JS = r'''(() => {
     saves:icon('<path d="M4 3h13l3 3v15H4Z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/>'),
     menu:icon('<path d="M4 6h16M4 12h16M4 18h16"/>')
   };
-  const settingsMarkup = () => `<label class="gl-setting"><span>Story text <output data-value="text"></output></span><input data-setting="text" aria-label="Story text size" type="range" min="16" max="24" step="1"></label>
-    <label class="gl-setting"><span>Picture height <output data-value="picture"></output></span><input data-setting="picture" aria-label="Maximum picture height" type="range" min="24" max="64" step="4"></label>
-    <label class="gl-setting"><span>Story / actions <output data-value="share"></output></span><input data-setting="share" aria-label="Mobile story height percentage" type="range" min="55" max="80" step="5"></label>
-    <p>Changes apply immediately and stay on this browser, not in your save. Story/actions sizing applies on phones.</p>`;
+  const settingsMarkup = () => `<label class="gl-setting"><span>${t("storyText")} <output data-value="text"></output></span><input data-setting="text" aria-label="${t("storyTextAria")}" type="range" min="16" max="24" step="1"></label>
+    <label class="gl-setting"><span>${t("pictureHeight")} <output data-value="picture"></output></span><input data-setting="picture" aria-label="${t("pictureAria")}" type="range" min="24" max="64" step="4"></label>
+    <label class="gl-setting"><span>${t("storyActions")} <output data-value="share"></output></span><input data-setting="share" aria-label="${t("storyActionsAria")}" type="range" min="55" max="80" step="5"></label>
+    <p>${t("settingsNote")}</p>`;
   const home = document.createElement("section");
   home.className = "gl-home";
-  home.setAttribute("aria-label", "Girl Life launcher");
-  home.innerHTML = `<div class="gl-art" aria-hidden="true">
-    <svg viewBox="0 0 700 500" fill="none"><circle cx="180" cy="100" r="45" stroke="currentColor" opacity=".4"/><path d="M0 320H700M0 350H700M0 395H700M0 455H700" stroke="currentColor" opacity=".18"/><path d="M0 300h70v-80h45v-90h35v90h50v80h40V190h60v-60h30v60h60v110h35V150h45V95h12v55h45v150h40v-80h85v80h48" stroke="currentColor" stroke-width="2"/><path d="M0 335Q175 220 350 335T700 335" stroke="currentColor" stroke-width="3"/><path d="M0 340h700" stroke="currentColor" stroke-width="2"/></svg>
-    <div class="gl-art-caption"><span>A life of your own</span><h2>A city of stories.<br>A choice at every turn.</h2></div></div>
-    <div class="gl-home-panel"><h1 class="gl-wordmark">GIRL <strong>LIFE</strong></h1><p class="gl-eyebrow">English Community Version · Browser edition</p>
-      <div class="gl-tabs" role="tablist" aria-label="Launcher pages">
-        <button id="gl-tab-play" role="tab" aria-controls="gl-page-play" aria-selected="true" data-tab="play">Play</button>
-        <button id="gl-tab-settings" role="tab" aria-controls="gl-page-settings" aria-selected="false" tabindex="-1" data-tab="settings">Settings</button>
-        <button id="gl-tab-help" role="tab" aria-controls="gl-page-help" aria-selected="false" tabindex="-1" data-tab="help">Help</button>
+  home.setAttribute("aria-label", t("launcher"));
+  home.innerHTML = `<div class="gl-home-panel"><div class="gl-home-title"><h1 class="gl-wordmark">GIRL <strong>LIFE</strong></h1><label class="gl-language"><span data-copy="language">Language</span><select id="gl-language" aria-label="${t("language")}"><option value="en">English</option><option value="zh">繁體中文</option></select></label></div><p class="gl-eyebrow" data-copy="eyebrow">English Community Version · Browser edition</p>
+      <div class="gl-tabs" role="tablist" aria-label="${t("pages")}">
+        <button id="gl-tab-play" role="tab" aria-controls="gl-page-play" aria-selected="true" data-tab="play" data-copy="play">Play</button>
+        <button id="gl-tab-settings" role="tab" aria-controls="gl-page-settings" aria-selected="false" tabindex="-1" data-tab="settings" data-copy="settings">Settings</button>
+        <button id="gl-tab-help" role="tab" aria-controls="gl-page-help" aria-selected="false" tabindex="-1" data-tab="help" data-copy="help">Help</button>
       </div>
       <section class="gl-tabpanel" id="gl-page-play" role="tabpanel" aria-labelledby="gl-tab-play">
-        <div class="gl-play-block"><button class="gl-primary" data-command="play" disabled>Preparing game…</button><p class="gl-readiness" role="status">Loading the original QSP game. Download progress appears above.</p><button class="gl-secondary" data-command="saves" disabled>Load a cloud save</button></div>
-        <dl class="gl-facts"><div><dt>Game</dt><dd data-game-title>Reading game information…</dd></div><div><dt>Story language</dt><dd>English · original game file</dd></div><div><dt>Saves</dt><dd>Cloud account required · sign in when you load or save</dd></div></dl>
-        <p>This launcher is for adults aged 18 and over. Play opens the game currently loaded in this tab; it does not start a new character or load a save automatically.</p>
+        <div class="gl-play-block"><button class="gl-primary" data-command="play" disabled data-copy="preparing">Preparing game…</button><p class="gl-readiness" role="status" data-copy="loading">Loading the original QSP game. Download progress appears above.</p><button class="gl-secondary" data-command="saves" disabled data-copy="loadSave">Load a cloud save</button></div>
+        <dl class="gl-facts"><div><dt data-copy="game">Game</dt><dd data-game-title data-copy="gameInfo">Reading game information…</dd></div><div><dt data-copy="gameLanguage">Game language</dt><dd data-copy="gameEnglish">English · original game file</dd></div></dl>
+        <p data-copy="adult">For adults 18+. Play opens the game in this tab. Start a new character from the game menu.</p>
       </section>
-      <section class="gl-tabpanel" id="gl-page-settings" role="tabpanel" aria-labelledby="gl-tab-settings" hidden><h2>Make room for your story</h2>${settingsMarkup()}<button class="gl-secondary" data-command="reset">Reset interface</button></section>
-      <section class="gl-tabpanel" id="gl-page-help" role="tabpanel" aria-labelledby="gl-tab-help" hidden><h2>Everything in one place</h2><ul><li>Play opens the game. Use its Start action for a new character.</li><li>Items and Stats open the game's own panels; select again to close.</li><li>Saves opens the existing cloud-save panel after sign-in.</li><li>Home returns here without restarting or saving the game.</li></ul><p>Keep a separate copy of important saves. Physical-phone and Windows testing is not complete.</p><button class="gl-secondary" data-command="diagnostics">View diagnostic report</button><p><a href="https://github.com/samttoo22-MewCat/GirlLife2HTML" target="_blank" rel="noopener noreferrer">Project & documentation</a></p></section>
-      <footer class="gl-home-footer">GirlLife2HTML · cloud-23 · Powered by qSpider<br>Unofficial interface · no game-content rewrite</footer>
+      <section class="gl-tabpanel" id="gl-page-settings" role="tabpanel" aria-labelledby="gl-tab-settings" hidden><h2 data-copy="settingsTitle">Make room for your story</h2><div data-settings-container>${settingsMarkup()}</div><button class="gl-secondary" data-command="reset" data-copy="reset">Reset interface</button></section>
+       <section class="gl-tabpanel" id="gl-page-help" role="tabpanel" aria-labelledby="gl-tab-help" hidden><h2 data-copy="quickHelp">Quick help</h2><ul><li data-copy="helpPlay">Play opens the game; use Start to begin.</li><li data-copy="helpSaves">Cloud saves require an account.</li><li data-copy="helpHome">Home returns here without saving or restarting.</li></ul><button class="gl-secondary" data-command="diagnostics" data-copy="diagnostics">View diagnostics</button><p><a href="https://github.com/samttoo22-MewCat/GirlLife2HTML" target="_blank" rel="noopener noreferrer" data-copy="project">Project & documentation</a></p></section>
+      <footer class="gl-home-footer">GirlLife2HTML · cloud-25 · Powered by qSpider<br><span data-copy="footer">Unofficial interface · no game-content rewrite</span></footer>
     </div>`;
   const header = document.createElement("header");
   header.className = "gl-header"; header.hidden = true;
-  header.innerHTML = '<strong>GIRL LIFE</strong><small>Browser edition</small><button data-command="interface">Interface</button>';
+  header.innerHTML = `<strong>GIRL LIFE</strong><small>${t("browser")}</small><button data-command="interface">${t("interface")}</button>`;
   const dock = document.createElement("nav");
-  dock.className = "gl-dock"; dock.hidden = true; dock.setAttribute("aria-label", "Game tools");
-  dock.innerHTML = [ ["home","Home"],["objects","Items"],["stats","Stats"],["saves","Saves"],["menu","Menu"] ].map(([key,label]) => `<button data-command="${key}" ${key === "objects" || key === "stats" ? 'aria-pressed="false"' : ''}>${icons[key]}<span>${label}</span></button>`).join("");
+  dock.className = "gl-dock"; dock.hidden = true; dock.setAttribute("aria-label", t("moreTools"));
+  dock.innerHTML = [ ["home","home"],["objects","items"],["stats","stats"],["saves","saves"],["menu","menu"] ].map(([key,label]) => `<button data-command="${key}" ${key === "objects" || key === "stats" ? 'aria-pressed="false"' : ''}>${icons[key]}<span>${t(label)}</span></button>`).join("");
   const dialog = document.createElement("dialog"); dialog.className = "gl-dialog";
   dialog.setAttribute("aria-labelledby", "gl-dialog-title");
-  dialog.innerHTML = `<header><h2 id="gl-dialog-title">Your interface</h2><button data-command="close" aria-label="Close interface settings">Close</button></header>
-    <nav aria-label="More game tools"><button data-command="account">Cloud account</button><button data-command="native-menu">Game preferences</button><button data-command="home">Home</button></nav>
-    ${settingsMarkup()}<button data-command="reset">Reset interface</button>
-    <p>Reset changes only these display preferences, not your character, progress, cloud account or game variables.</p>
-    <details><summary>Help & diagnostics</summary><p>No report is sent automatically. The report contains display/engine readiness information only: no story, account name, token or save content.</p><textarea readonly aria-label="Diagnostic report"></textarea><button data-command="copy">Copy report</button><p data-copy-status role="status"></p></details>`;
+  dialog.innerHTML = `<header><h2 id="gl-dialog-title">${t("yourInterface")}</h2><button data-command="close" aria-label="${t("closeSettings")}">${t("close")}</button></header>
+    <nav aria-label="${t("moreTools")}"><button data-command="account">${t("account")}</button><button data-command="native-menu">${t("gamePreferences")}</button><button data-command="home">${t("home")}</button></nav>
+    <div data-settings-container>${settingsMarkup()}</div><button data-command="reset">${t("reset")}</button>
+    <p>${t("resetNote")}</p>
+    <details><summary>${t("helpDiagnostics")}</summary><p>${t("noReport")}</p><textarea readonly aria-label="${t("diagnosticReport")}"></textarea><button data-command="copy">${t("copyReport")}</button><p data-copy-status role="status"></p></details>`;
   const toast = document.createElement("div"); toast.className = "gl-toast"; toast.hidden = true; toast.setAttribute("role", "status");
   document.body.append(home, header, dock, dialog, toast);
   window.addEventListener("keydown", event => {
@@ -931,13 +936,40 @@ BROWSER_UI_JS = r'''(() => {
     event.preventDefault(); event.stopImmediatePropagation(); dialog.close();
   }, true);
   function notify(message) { clearTimeout(toastTimer); toast.textContent = message; toast.hidden = false; toastTimer = setTimeout(() => { toast.hidden = true; }, 3500); }
+  function localize() {
+    home.setAttribute("aria-label", t("launcher"));
+    home.lang = language === "zh" ? "zh-Hant" : "en";
+    home.querySelectorAll("[data-copy]").forEach(node => { node.textContent = t(node.dataset.copy); });
+    home.querySelector('[role="tablist"]').setAttribute("aria-label", t("pages"));
+    home.querySelector("#gl-language").setAttribute("aria-label", t("language"));
+    home.querySelector("[data-settings-container]").innerHTML = settingsMarkup();
+    header.querySelector("small").textContent = t("browser");
+    header.querySelector('[data-command="interface"]').textContent = t("interface");
+    dock.setAttribute("aria-label", t("moreTools"));
+    dock.querySelectorAll("[data-command]").forEach(button => { button.querySelector("span").textContent = t(button.dataset.command === "objects" ? "items" : button.dataset.command === "home" ? "home" : button.dataset.command); });
+    dialog.querySelector("#gl-dialog-title").textContent = t("yourInterface");
+    dialog.querySelector('[data-command="close"]').textContent = t("close");
+    dialog.querySelector('[data-command="close"]').setAttribute("aria-label", t("closeSettings"));
+    dialog.querySelector("nav").setAttribute("aria-label", t("moreTools"));
+    dialog.querySelector('[data-command="account"]').textContent = t("account");
+    dialog.querySelector('[data-command="native-menu"]').textContent = t("gamePreferences");
+    dialog.querySelector('[data-command="home"]').textContent = t("home");
+    dialog.querySelector('[data-command="reset"]').textContent = t("reset");
+    dialog.querySelector("header + nav + [data-settings-container]").innerHTML = settingsMarkup();
+    dialog.querySelector("header + nav + [data-settings-container] + button + p").textContent = t("resetNote");
+    dialog.querySelector("summary").textContent = t("helpDiagnostics");
+    dialog.querySelector("details p").textContent = t("noReport");
+    dialog.querySelector("textarea").setAttribute("aria-label", t("diagnosticReport"));
+    dialog.querySelector('[data-command="copy"]').textContent = t("copyReport");
+    applySettings();
+  }
   function applySettings(persist = false) {
     root.style.setProperty("--gl-text", settings.text + "px");
     root.style.setProperty("--gl-picture", settings.picture + "dvh");
     root.style.setProperty("--gl-main-share", String(settings.share));
     document.querySelectorAll("[data-setting]").forEach(input => { input.value = settings[input.dataset.setting]; });
-    document.querySelectorAll("[data-value]").forEach(out => { const key = out.dataset.value; out.textContent = key === "text" ? settings.text + "px" : key === "picture" ? settings.picture + "% of screen" : settings.share + "% / " + (100-settings.share) + "%"; });
-    if (persist) { try { localStorage.setItem(storageKey, JSON.stringify(settings)); } catch (_) { notify("Browser storage is unavailable; settings last for this tab only."); } }
+    document.querySelectorAll("[data-value]").forEach(out => { const key = out.dataset.value; out.textContent = key === "text" ? settings.text + "px" : key === "picture" ? settings.picture + (language === "zh" ? "% 畫面高度" : "% of screen") : settings.share + "% / " + (100-settings.share) + "%"; });
+    if (persist) { try { localStorage.setItem(storageKey, JSON.stringify(settings)); } catch (_) { notify(t("storageFail")); } }
   }
   function setHome(open) {
     home.hidden = !open; header.hidden = open; dock.hidden = open;
@@ -946,10 +978,10 @@ BROWSER_UI_JS = r'''(() => {
     else header.querySelector("button").focus();
   }
   function report() {
-    return JSON.stringify({interface:"cloud-23", viewport:[innerWidth,innerHeight], theme:document.querySelector(".aero-theme") ? "aero" : "classic", engineReady:ready, display:settings, panels:{items:!!document.querySelector("qsp-objects"),stats:!!document.querySelector("qsp-stats")}}, null, 2);
+    return JSON.stringify({interface:"cloud-25", viewport:[innerWidth,innerHeight], theme:document.querySelector(".aero-theme") ? "aero" : "classic", engineReady:ready, display:settings, panels:{items:!!document.querySelector("qsp-objects"),stats:!!document.querySelector("qsp-stats")}}, null, 2);
   }
   async function engine(command) {
-    if (!ready || typeof window.girllifeBrowserCommand !== "function") { notify("The game is still loading. Please wait."); return; }
+    if (!ready || typeof window.girllifeBrowserCommand !== "function") { notify(t("loadingWait")); return; }
     await window.girllifeBrowserCommand(command);
   }
   function openInterface(diagnostics = false) {
@@ -968,6 +1000,13 @@ BROWSER_UI_JS = r'''(() => {
     event.preventDefault(); index = event.key === "Home" ? 0 : event.key === "End" ? tabs.length-1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
     selectTab(tabs[index].dataset.tab, true);
   });
+  home.querySelector("#gl-language").value = language;
+  home.querySelector("#gl-language").addEventListener("change", event => {
+    language = event.target.value === "zh" ? "zh" : "en";
+    try { localStorage.setItem(languageKey, language); } catch (_) {}
+    localize();
+  });
+  localize();
   [home, dialog, dock, header].forEach(element => {
     for (const type of ["keydown", "keyup", "keypress"]) element.addEventListener(type, event => event.stopPropagation());
     element.addEventListener("input", event => { const key = event.target.dataset.setting; if (!Object.hasOwn(defaults,key)) return; settings = validate({...settings,[key]:event.target.value}); applySettings(true); });
@@ -976,20 +1015,20 @@ BROWSER_UI_JS = r'''(() => {
       const button = event.target.closest("[data-command]"); if (!button || button.disabled) return;
       const command = button.dataset.command;
       if (command === "play") { entered = true; setHome(false); return; }
-      if (command === "reset") { settings = {...defaults}; applySettings(true); notify("Interface reset. Your game and saves are unchanged."); return; }
+      if (command === "reset") { settings = {...defaults}; applySettings(true); notify(t("resetDone")); return; }
       if (command === "interface" || command === "menu" || command === "diagnostics") { openInterface(command === "diagnostics"); return; }
       if (command === "close") { dialog.close(); return; }
-      if (command === "copy") { const text = report(); dialog.querySelector("textarea").value = text; try { await navigator.clipboard.writeText(text); dialog.querySelector("[data-copy-status]").textContent = "Report copied. Share it only if you choose."; } catch (_) { dialog.querySelector("textarea").select(); dialog.querySelector("[data-copy-status]").textContent = "Copy is unavailable. Select and copy the report above."; } return; }
+      if (command === "copy") { const text = report(); dialog.querySelector("textarea").value = text; try { await navigator.clipboard.writeText(text); dialog.querySelector("[data-copy-status]").textContent = t("copyDone"); } catch (_) { dialog.querySelector("textarea").select(); dialog.querySelector("[data-copy-status]").textContent = t("copyFail"); } return; }
       if (command === "objects" || command === "stats") {
         const control = document.querySelector('qsp-player [data-mobile-panel="' + command + '"]');
-        if (!document.querySelector(command === "objects" ? "qsp-objects" : "qsp-stats")) { notify("This panel is not available on the current game screen."); return; }
+        if (!document.querySelector(command === "objects" ? "qsp-objects" : "qsp-stats")) { notify(t("panelUnavailable")); return; }
         if (control) control.click(); syncPanels(); return;
       }
       if (dialog.open) dialog.close();
       try {
-        if (command === "home") { await engine("resume"); setHome(true); notify("Game stays open in this tab. Returning home does not save it."); }
+        if (command === "home") { await engine("resume"); setHome(true); notify(t("homeNotice")); }
         else { setHome(false); entered = true; await engine(command === "native-menu" ? "menu" : command); }
-      } catch (_) { notify("Could not open this panel. Return to the game and try again."); }
+      } catch (_) { notify(t("openFail")); }
     });
   });
   function syncPanels() {
@@ -1001,7 +1040,7 @@ BROWSER_UI_JS = r'''(() => {
       if (button.getAttribute("aria-pressed") !== String(!!selected)) button.setAttribute("aria-pressed", String(!!selected));
       if (selected) active = key;
     }
-    const caption = active === "stats" ? "Status panel · actions below" : active === "objects" ? "Inventory · actions below" : "Browser edition";
+    const caption = active === "stats" ? t("status") : active === "objects" ? t("inventory") : t("browser");
     if (header.querySelector("small").textContent !== caption) header.querySelector("small").textContent = caption;
   }
   function syncPalette() {
@@ -1019,12 +1058,12 @@ BROWSER_UI_JS = r'''(() => {
     syncPalette();
     ready = ready || (!!document.querySelector('qsp-main-content') && !!document.querySelector('[data-qsp="action"]') && typeof window.girllifeBrowserCommand === "function");
     const play = home.querySelector('[data-command="play"]');
-    const label = ready ? (entered ? "Return to game" : "Play") : "Preparing game…";
+    const label = ready ? (entered ? t("return") : t("play")) : t("preparing");
     if (play.textContent !== label) play.textContent = label;
     play.disabled = !ready; home.querySelector('[data-command="saves"]').disabled = !ready;
-    const title = home.querySelector("[data-game-title]"); const name = document.title === "qSpider" ? "Original English QSP" : document.title;
+    const title = home.querySelector("[data-game-title]"); const name = document.title === "qSpider" ? (language === "zh" ? "原始英文 QSP" : "Original English QSP") : document.title;
     if (title.textContent !== name) title.textContent = name;
-    const status = home.querySelector(".gl-readiness"); const message = ready ? "Ready to play · original QSP engine" : "Loading the original QSP game. Download progress appears above.";
+    const status = home.querySelector(".gl-readiness"); const message = ready ? t("ready") : t("loading");
     if (status.textContent !== message) status.textContent = message;
     const game = document.querySelector("qsp-game-root"); if (game && game.inert !== !home.hidden) game.inert = !home.hidden;
     syncPanels();
